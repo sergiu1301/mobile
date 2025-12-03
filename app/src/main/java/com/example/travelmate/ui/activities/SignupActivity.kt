@@ -8,8 +8,11 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
+import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.repository.UserRepository
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
@@ -29,6 +32,7 @@ class SignupActivity : AppCompatActivity() {
     private lateinit var btnSignup: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tvLoginLink: TextView
+    private lateinit var securePrefs: android.content.SharedPreferences
 
     private lateinit var userRepository: UserRepository
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -51,6 +55,18 @@ class SignupActivity : AppCompatActivity() {
 
         val db = TripDatabase.getDatabase(this)
         userRepository = UserRepository(db.userDao())
+
+        val masterKey = MasterKey.Builder(this)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        securePrefs = EncryptedSharedPreferences.create(
+            this,
+            "secure_user_prefs",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
 
         listOf(etName, etEmail, etPassword, etConfirmPassword).forEach {
             it.addTextChangedListener(validationWatcher)
@@ -112,11 +128,8 @@ class SignupActivity : AppCompatActivity() {
         val password = etPassword.text.toString().trim()
 
         coroutineScope.launch {
-            val existingUser = withContext(Dispatchers.IO) {
-                userRepository.getUserByEmail(email)
-            }
-
-            delay(500)
+            val existingUser = withContext(Dispatchers.IO) { userRepository.getUserByEmail(email) }
+            delay(300)
 
             if (existingUser != null) {
                 progressBar.visibility = View.GONE
@@ -128,6 +141,28 @@ class SignupActivity : AppCompatActivity() {
                     .show()
                 return@launch
             }
+
+            val remoteResult = withContext(Dispatchers.IO) {
+                RemoteServerClient.registerUser(name, email, password)
+            }
+
+            if (remoteResult.isFailure) {
+                progressBar.visibility = View.GONE
+                btnSignup.isEnabled = true
+                Snackbar.make(btnSignup, "Cloud signup failed. Check connection ⚠️", Snackbar.LENGTH_LONG)
+                    .setBackgroundTint(
+                        ContextCompat.getColor(this@SignupActivity, android.R.color.holo_red_dark)
+                    )
+                    .show()
+                return@launch
+            }
+
+            val tokenPayload = remoteResult.getOrNull()
+            securePrefs.edit().apply {
+                putString("auth_token", tokenPayload?.token)
+                putString("role", tokenPayload?.role ?: "user")
+                putString("email", email)
+            }.apply()
 
             withContext(Dispatchers.IO) {
                 userRepository.registerUser(email, password, role = "user", name)
