@@ -5,7 +5,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import android.content.Context
 
-@Database(entities = [Trip::class, User::class], version = 8, exportSchema = false)
+@Database(entities = [Trip::class, User::class], version = 9, exportSchema = false)
 abstract class TripDatabase : RoomDatabase() {
     abstract fun tripDao(): TripDao
     abstract fun userDao(): UserDao
