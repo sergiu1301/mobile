@@ -18,6 +18,7 @@ import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
 import com.example.travelmate.data.User
+import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.repository.UserRepository
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -269,22 +270,46 @@ class LoginActivity : AppCompatActivity() {
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
 
+            val remoteLogin = withContext(Dispatchers.IO) {
+                RemoteServerClient.loginUser(email, password)
+            }
+
+            if (remoteLogin.isFailure) {
+                progressBar.visibility = View.GONE
+                btnLogin.isEnabled = true
+                Snackbar.make(btnLogin, "Server authentication failed ⚠️", Snackbar.LENGTH_LONG)
+                    .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
+                    .show()
+                return@launch
+            }
+
+            val tokenPayload = remoteLogin.getOrNull()
+            securePrefs.edit().apply {
+                putString("auth_token", tokenPayload?.token)
+                putString("role", tokenPayload?.role ?: "user")
+            }.apply()
+
             val user = withContext(Dispatchers.IO) { userRepository.loginUser(email, password) }
 
             delay(600)
             progressBar.visibility = View.GONE
             btnLogin.isEnabled = true
 
-            if (user != null) {
-                if (user.isBlocked) {
+            val resolvedUser = user ?: withContext(Dispatchers.IO) {
+                userRepository.registerUser(email, password, role = tokenPayload?.role ?: "user", name = email)
+                userRepository.getUserByEmail(email)
+            }
+
+            if (resolvedUser != null) {
+                if (resolvedUser.isBlocked) {
                     Snackbar.make(btnLogin, "Your account is blocked ❌", Snackbar.LENGTH_LONG)
                         .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
                         .show()
                     return@launch
                 }
 
-                saveUserSession(user)
-                showMfaDialog(user)
+                saveUserSession(resolvedUser)
+                showMfaDialog(resolvedUser)
             } else {
                 Snackbar.make(btnLogin, "Invalid credentials ❌", Snackbar.LENGTH_LONG)
                     .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))

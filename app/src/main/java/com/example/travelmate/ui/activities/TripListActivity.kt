@@ -16,6 +16,7 @@ import com.example.travelmate.R
 import com.example.travelmate.TripAdapter
 import com.example.travelmate.data.Trip
 import com.example.travelmate.data.TripDatabase
+import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.network.WeatherService
 import com.example.travelmate.repository.TripRepository
 import com.example.travelmate.utils.NetworkMonitor
@@ -30,6 +31,7 @@ class TripListActivity : AppCompatActivity() {
     private lateinit var tvOffline: TextView
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnAddTrip: Button
+    private lateinit var securePrefs: android.content.SharedPreferences
 
     private var lastNetworkState: Boolean? = null
     private var currentUserEmail: String = ""
@@ -51,7 +53,7 @@ class TripListActivity : AppCompatActivity() {
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        val securePrefs = EncryptedSharedPreferences.create(
+        securePrefs = EncryptedSharedPreferences.create(
             this,
             "secure_user_prefs",
             masterKey,
@@ -107,6 +109,25 @@ class TripListActivity : AppCompatActivity() {
             recyclerView.adapter = TripAdapter(trips, onDeleteClick = { trip ->
                 deleteTrip(trip)
             })
+
+            if (lastNetworkState != false) {
+                syncTripsWithServer(trips)
+            }
+        }
+    }
+
+    private fun syncTripsWithServer(trips: List<Trip>) {
+        val token = securePrefs.getString("auth_token", null) ?: return
+        lifecycleScope.launch {
+            val syncResult = withContext(Dispatchers.IO) {
+                RemoteServerClient.syncTrips(token, trips)
+            }
+
+            syncResult.onSuccess {
+                Toast.makeText(this@TripListActivity, "Trips synced to cloud ☁️", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@TripListActivity, "Trip sync failed ⚠️", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
