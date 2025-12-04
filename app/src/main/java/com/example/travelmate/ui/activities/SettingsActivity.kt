@@ -9,10 +9,10 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
+import com.example.travelmate.network.ApiService
+import com.example.travelmate.network.TokenManager
 import com.example.travelmate.repository.UserRepository
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
@@ -26,22 +26,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var ivLogoutIcon: ImageView
     private lateinit var userRepository: UserRepository
     private lateinit var securePrefs: SharedPreferences
+    private lateinit var tokenManager: TokenManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        val masterKey = MasterKey.Builder(this)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
-        securePrefs = EncryptedSharedPreferences.create(
-            this,
-            "secure_user_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        tokenManager = TokenManager.getInstance(this)
+        securePrefs = tokenManager.preferences()
+        ApiService.attachTokenProvider { tokenManager.getToken() }
 
         switchBiometrics = findViewById(R.id.switchBiometrics)
         tvLogout = findViewById(R.id.btnLogout)
@@ -101,6 +94,8 @@ class SettingsActivity : AppCompatActivity() {
                     remove("role")
                     apply()
                 }
+                tokenManager.clearAuth()
+                ApiService.clearTokenProvider()
 
                 Snackbar.make(tvLogout, "Logged out successfully 👋", Snackbar.LENGTH_SHORT)
                     .setBackgroundTint(ContextCompat.getColor(this@SettingsActivity, android.R.color.holo_red_dark))

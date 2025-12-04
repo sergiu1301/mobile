@@ -12,35 +12,61 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:gravity="center_horizontal"
+        android:paddingBottom="32dp">
 
-        <!-- 🔹 Logo / App Name -->
         <TextView
             android:id="@+id/tvTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="TravelMate"
-            android:textSize="32sp"
+            android:textSize="30sp"
             android:textStyle="bold"
             android:textColor="#000000"
-            android:layout_marginBottom="48dp"
+            android:layout_marginBottom="4dp"
             android:fontFamily="sans-serif-medium" />
 
-        <!-- 🔹 Email input -->
+        <TextView
+            android:id="@+id/tvSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sign in to sync trips across devices"
+            android:textColor="#4D4D4D"
+            android:textSize="15sp"
+            android:layout_marginBottom="28dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Account credentials"
+            android:textColor="#000000"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/inputLayoutEmail"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Email Address"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="12dp">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etEmail"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textEmailAddress" />
+                android:inputType="textEmailAddress"
+                android:contentDescription="Email input" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Use a valid email format so we can keep your trips safe."
+            android:textColor="#757575"
+            android:textSize="12sp"
+            android:layout_marginBottom="6dp" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/inputLayoutPassword"
@@ -48,35 +74,100 @@
             android:layout_height="wrap_content"
             android:hint="Password"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            android:layout_marginBottom="24dp">
+            android:layout_marginBottom="18dp">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etPassword"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textPassword" />
+                android:inputType="textPassword"
+                android:contentDescription="Password input" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <Button
             android:id="@+id/btnLogin"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Login"
+            android:text="Log in securely"
             android:textAllCaps="false"
             android:textStyle="bold"
             android:textSize="18sp"
             android:textColor="#FFFFFF"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="12dp"
             android:background="@drawable/btn_black_bg"
             android:paddingVertical="14dp"
             android:elevation="4dp"
             android:fontFamily="sans-serif-medium" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+
+            <ProgressBar
+                android:id="@+id/progressBar"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:visibility="gone"
+                android:indeterminateTint="#000000"
+                android:layout_marginEnd="12dp" />
+
+            <TextView
+                android:id="@+id/tvBiometricHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fast, secure sign in"
+                android:textColor="#4D4D4D"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <ImageButton
+                android:id="@+id/btnBiometric"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_round_button"
+                android:src="@drawable/ic_fingerprint"
+                android:contentDescription="Biometric Login"
+                android:backgroundTint="#E0E0E0"
+                android:layout_marginEnd="10dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Use fingerprint or device PIN after your first sign in."
+                android:textColor="#4D4D4D"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#DDDDDD"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Social & guest options"
+            android:textColor="#000000"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
         <com.google.android.gms.common.SignInButton
             android:id="@+id/btnGoogle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="10dp" />
 
         <TextView
             android:id="@+id/btnGuest"
@@ -84,37 +175,9 @@
             android:layout_height="wrap_content"
             android:text="Continue as Guest 👤"
             android:textColor="#2962FF"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="12dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"
             android:textSize="15sp" />
-
-        <ImageButton
-            android:id="@+id/btnBiometric"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_round_button"
-            android:src="@drawable/ic_fingerprint"
-            android:contentDescription="Biometric Login"
-            android:backgroundTint="#CCCCCC"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:id="@+id/tvBiometricHint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Biometric Login"
-            android:textColor="#000000"
-            android:textSize="14sp"
-            android:layout_marginBottom="16dp" />
-
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            android:layout_marginTop="16dp"
-            android:indeterminateTint="#000000" />
 
         <TextView
             android:id="@+id/tvCreateAccount"
@@ -122,8 +185,7 @@
             android:layout_height="wrap_content"
             android:text="Don't have an account? Sign up"
             android:textColor="#2962FF"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="12dp"
             android:textSize="15sp" />
-
     </LinearLayout>
 </ScrollView>

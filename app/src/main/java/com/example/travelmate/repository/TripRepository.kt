@@ -2,6 +2,7 @@ package com.example.travelmate.repository
 
 import com.example.travelmate.data.Trip
 import com.example.travelmate.data.TripDao
+import com.example.travelmate.network.RemoteServerClient
 
 class TripRepository(private val tripDao: TripDao) {
 
@@ -24,4 +25,6 @@ class TripRepository(private val tripDao: TripDao) {
     suspend fun getTripById(tripId: Int): Trip? {
         return tripDao.getTripById(tripId)
     }
+
+    suspend fun syncTrips(token: String, trips: List<Trip>) = RemoteServerClient.syncTrips(token, trips)
 }
