@@ -10,13 +10,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.TripAdapter
 import com.example.travelmate.data.Trip
 import com.example.travelmate.data.TripDatabase
-import com.example.travelmate.network.RemoteServerClient
+import com.example.travelmate.network.TokenManager
 import com.example.travelmate.network.WeatherService
 import com.example.travelmate.repository.TripRepository
 import com.example.travelmate.utils.NetworkMonitor
@@ -31,7 +29,7 @@ class TripListActivity : AppCompatActivity() {
     private lateinit var tvOffline: TextView
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnAddTrip: Button
-    private lateinit var securePrefs: android.content.SharedPreferences
+    private lateinit var tokenManager: TokenManager
 
     private var lastNetworkState: Boolean? = null
     private var currentUserEmail: String = ""
@@ -49,19 +47,9 @@ class TripListActivity : AppCompatActivity() {
         val db = TripDatabase.getDatabase(this)
         tripRepo = TripRepository(db.tripDao())
 
-        val masterKey = MasterKey.Builder(this)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        tokenManager = TokenManager.getInstance(this)
 
-        securePrefs = EncryptedSharedPreferences.create(
-            this,
-            "secure_user_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-
-        currentUserEmail = securePrefs.getString("email", "") ?: ""
+        currentUserEmail = tokenManager.getEmail() ?: ""
 
         if (currentUserEmail.isEmpty()) {
             Toast.makeText(this, "Session expired, please login again", Toast.LENGTH_SHORT).show()
@@ -97,9 +85,13 @@ class TripListActivity : AppCompatActivity() {
         if (isOnline) {
             tvOffline.text = "✅ Online Mode – trips will sync automatically"
             tvOffline.setTextColor(Color.parseColor("#2E7D32"))
+            btnAddTrip.isEnabled = true
+            btnAddTrip.alpha = 1f
         } else {
-            tvOffline.text = "⚠️ Offline Mode – changes will sync later"
+            tvOffline.text = "⚠️ Offline Mode – viewing cached trips (read-only)"
             tvOffline.setTextColor(Color.parseColor("#E65100"))
+            btnAddTrip.isEnabled = false
+            btnAddTrip.alpha = 0.5f
         }
     }
 
@@ -117,16 +109,16 @@ class TripListActivity : AppCompatActivity() {
     }
 
     private fun syncTripsWithServer(trips: List<Trip>) {
-        val token = securePrefs.getString("auth_token", null) ?: return
+        val token = tokenManager.getToken() ?: return
         lifecycleScope.launch {
             val syncResult = withContext(Dispatchers.IO) {
-                RemoteServerClient.syncTrips(token, trips)
+                tripRepo.syncTrips(token, trips)
             }
 
             syncResult.onSuccess {
                 Toast.makeText(this@TripListActivity, "Trips synced to cloud ☁️", Toast.LENGTH_SHORT).show()
             }.onFailure {
-                Toast.makeText(this@TripListActivity, "Trip sync failed ⚠️", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@TripListActivity, "Trip sync failed. We'll retry when you're online.", Toast.LENGTH_SHORT).show()
             }
         }
     }

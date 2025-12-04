@@ -8,11 +8,10 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
-import com.example.travelmate.network.RemoteServerClient
+import com.example.travelmate.network.TokenManager
+import com.example.travelmate.repository.AuthRepository
 import com.example.travelmate.repository.UserRepository
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
@@ -32,9 +31,10 @@ class SignupActivity : AppCompatActivity() {
     private lateinit var btnSignup: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tvLoginLink: TextView
-    private lateinit var securePrefs: android.content.SharedPreferences
+    private lateinit var tokenManager: TokenManager
 
     private lateinit var userRepository: UserRepository
+    private lateinit var authRepository: AuthRepository
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,18 +55,8 @@ class SignupActivity : AppCompatActivity() {
 
         val db = TripDatabase.getDatabase(this)
         userRepository = UserRepository(db.userDao())
-
-        val masterKey = MasterKey.Builder(this)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
-        securePrefs = EncryptedSharedPreferences.create(
-            this,
-            "secure_user_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        tokenManager = TokenManager.getInstance(this)
+        authRepository = AuthRepository(userRepository, tokenManager)
 
         listOf(etName, etEmail, etPassword, etConfirmPassword).forEach {
             it.addTextChangedListener(validationWatcher)
@@ -142,44 +132,30 @@ class SignupActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val remoteResult = withContext(Dispatchers.IO) {
-                RemoteServerClient.registerUser(name, email, password)
-            }
-
-            if (remoteResult.isFailure) {
-                progressBar.visibility = View.GONE
-                btnSignup.isEnabled = true
-                Snackbar.make(btnSignup, "Cloud signup failed. Check connection ⚠️", Snackbar.LENGTH_LONG)
-                    .setBackgroundTint(
-                        ContextCompat.getColor(this@SignupActivity, android.R.color.holo_red_dark)
-                    )
-                    .show()
-                return@launch
-            }
-
-            val tokenPayload = remoteResult.getOrNull()
-            securePrefs.edit().apply {
-                putString("auth_token", tokenPayload?.token)
-                putString("role", tokenPayload?.role ?: "user")
-                putString("email", email)
-            }.apply()
-
-            withContext(Dispatchers.IO) {
-                userRepository.registerUser(email, password, role = "user", name)
+            val signupResult = withContext(Dispatchers.IO) {
+                authRepository.register(name, email, password)
             }
 
             progressBar.visibility = View.GONE
             btnSignup.isEnabled = true
 
-            Snackbar.make(btnSignup, "Account created successfully ✅", Snackbar.LENGTH_SHORT)
-                .setBackgroundTint(
-                    ContextCompat.getColor(this@SignupActivity, android.R.color.holo_green_dark)
-                )
-                .show()
+            signupResult.onSuccess {
+                Snackbar.make(btnSignup, "Account created successfully ✅", Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint(
+                        ContextCompat.getColor(this@SignupActivity, android.R.color.holo_green_dark)
+                    )
+                    .show()
 
-            delay(800)
-            startActivity(Intent(this@SignupActivity, LoginActivity::class.java))
-            finish()
+                delay(800)
+                startActivity(Intent(this@SignupActivity, LoginActivity::class.java))
+                finish()
+            }.onFailure {
+                Snackbar.make(btnSignup, "Cloud signup failed. Check connection ⚠️", Snackbar.LENGTH_LONG)
+                    .setBackgroundTint(
+                        ContextCompat.getColor(this@SignupActivity, android.R.color.holo_red_dark)
+                    )
+                    .show()
+            }
         }
     }
 }

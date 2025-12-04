@@ -13,13 +13,13 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
 import com.example.travelmate.data.User
-import com.example.travelmate.network.RemoteServerClient
+import com.example.travelmate.network.ApiService
+import com.example.travelmate.network.TokenManager
 import com.example.travelmate.repository.UserRepository
+import com.example.travelmate.repository.AuthRepository
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -46,9 +46,11 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var tvCreateAccount: TextView
 
     private lateinit var userRepository: UserRepository
+    private lateinit var authRepository: AuthRepository
     private lateinit var googleSignInClient: GoogleSignInClient
     private lateinit var biometricPrompt: BiometricPrompt
     private lateinit var promptInfo: BiometricPrompt.PromptInfo
+    private lateinit var tokenManager: TokenManager
     private lateinit var securePrefs: SharedPreferences
 
     private lateinit var btnGuest: TextView
@@ -77,20 +79,13 @@ class LoginActivity : AppCompatActivity() {
             continueAsGuest()
         }
 
-        val masterKey = MasterKey.Builder(this)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
-        securePrefs = EncryptedSharedPreferences.create(
-            this,
-            "secure_user_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        tokenManager = TokenManager.getInstance(this)
+        securePrefs = tokenManager.preferences()
+        ApiService.attachTokenProvider { tokenManager.getToken() }
 
         val db = TripDatabase.getDatabase(this)
         userRepository = UserRepository(db.userDao())
+        authRepository = AuthRepository(userRepository, tokenManager)
 
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
@@ -159,6 +154,8 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun continueAsGuest() {
+        tokenManager.clearAuth()
+        tokenManager.saveAuth(null, "guest", "guest@local")
         securePrefs.edit().apply {
             putString("role", "guest")
             putString("email", "guest@local")
@@ -270,37 +267,14 @@ class LoginActivity : AppCompatActivity() {
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
 
-            val remoteLogin = withContext(Dispatchers.IO) {
-                RemoteServerClient.loginUser(email, password)
+            val loginResult = withContext(Dispatchers.IO) {
+                authRepository.login(email, password, enableBiometrics = biometricAvailable)
             }
 
-            if (remoteLogin.isFailure) {
-                progressBar.visibility = View.GONE
-                btnLogin.isEnabled = true
-                Snackbar.make(btnLogin, "Server authentication failed ⚠️", Snackbar.LENGTH_LONG)
-                    .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
-                    .show()
-                return@launch
-            }
-
-            val tokenPayload = remoteLogin.getOrNull()
-            securePrefs.edit().apply {
-                putString("auth_token", tokenPayload?.token)
-                putString("role", tokenPayload?.role ?: "user")
-            }.apply()
-
-            val user = withContext(Dispatchers.IO) { userRepository.loginUser(email, password) }
-
-            delay(600)
             progressBar.visibility = View.GONE
             btnLogin.isEnabled = true
 
-            val resolvedUser = user ?: withContext(Dispatchers.IO) {
-                userRepository.registerUser(email, password, role = tokenPayload?.role ?: "user", name = email)
-                userRepository.getUserByEmail(email)
-            }
-
-            if (resolvedUser != null) {
+            loginResult.onSuccess { resolvedUser ->
                 if (resolvedUser.isBlocked) {
                     Snackbar.make(btnLogin, "Your account is blocked ❌", Snackbar.LENGTH_LONG)
                         .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
@@ -310,8 +284,8 @@ class LoginActivity : AppCompatActivity() {
 
                 saveUserSession(resolvedUser)
                 showMfaDialog(resolvedUser)
-            } else {
-                Snackbar.make(btnLogin, "Invalid credentials ❌", Snackbar.LENGTH_LONG)
+            }.onFailure {
+                Snackbar.make(btnLogin, "Login failed. Check credentials or network.", Snackbar.LENGTH_LONG)
                     .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
                     .show()
             }
@@ -319,6 +293,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun saveUserSession(user: User) {
+        tokenManager.saveAuth(tokenManager.getToken(), user.role, user.email)
         securePrefs.edit().apply {
             putString("email", user.email)
             putString("role", user.role)
@@ -424,6 +399,7 @@ class LoginActivity : AppCompatActivity() {
             val email = account?.email ?: return
             val name = account.displayName ?: "Traveler"
 
+            tokenManager.saveAuth(tokenManager.getToken(), "user", email)
             securePrefs.edit().apply {
                 putString("email", email)
                 putString("role", "user")
