@@ -20,6 +20,7 @@ import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.network.WeatherService
 import com.example.travelmate.repository.TripRepository
 import com.example.travelmate.utils.NetworkMonitor
+import com.example.travelmate.utils.PendingSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ class TripListActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnAddTrip: Button
     private lateinit var securePrefs: android.content.SharedPreferences
+    private lateinit var pendingSyncManager: PendingSyncManager
 
     private var lastNetworkState: Boolean? = null
     private var currentUserEmail: String = ""
@@ -48,6 +50,7 @@ class TripListActivity : AppCompatActivity() {
 
         val db = TripDatabase.getDatabase(this)
         tripRepo = TripRepository(db.tripDao())
+        pendingSyncManager = PendingSyncManager(this, tripRepo)
 
         val masterKey = MasterKey.Builder(this)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -78,6 +81,7 @@ class TripListActivity : AppCompatActivity() {
                 if (lastNetworkState == false && isOnline) {
                     Toast.makeText(this, "Back online 🌐 Syncing weather data...", Toast.LENGTH_SHORT).show()
                     syncWeatherData()
+                    syncPendingTrips()
                 }
                 lastNetworkState = isOnline
             }
@@ -87,6 +91,10 @@ class TripListActivity : AppCompatActivity() {
         updateNetworkStatus(initialOnline)
         lastNetworkState = initialOnline
         networkMonitor.start()
+
+        if (initialOnline) {
+            syncPendingTrips()
+        }
 
         btnAddTrip.setOnClickListener {
             startActivity(Intent(this, AddTripActivity::class.java))
@@ -127,6 +135,21 @@ class TripListActivity : AppCompatActivity() {
                 Toast.makeText(this@TripListActivity, "Trips synced to cloud ☁️", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(this@TripListActivity, "Trip sync failed ⚠️", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun syncPendingTrips() {
+        val token = securePrefs.getString("auth_token", null) ?: return
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { pendingSyncManager.syncPendingTrips(token) }
+            result.onSuccess { synced ->
+                if (synced > 0) {
+                    Toast.makeText(this@TripListActivity, "Pending trips synced ($synced)", Toast.LENGTH_SHORT).show()
+                    loadTripsForUser()
+                }
+            }.onFailure {
+                Toast.makeText(this@TripListActivity, "Still offline, will retry sync", Toast.LENGTH_SHORT).show()
             }
         }
     }
