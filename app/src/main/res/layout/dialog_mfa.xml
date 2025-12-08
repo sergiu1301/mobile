@@ -1,17 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical"
     android:padding="24dp"
-    android:background="@drawable/bg_dialog"
+    android:background="@drawable/bg_surface_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
     <TextView
         android:text="Enter the 6-digit code sent to your email (demo: 123456)"
-        android:textColor="#000"
+        android:textColor="@color/brand_on_surface"
         android:textSize="16sp"
         android:layout_marginBottom="16dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:layout_height="wrap_content" />
 
     <EditText
         android:id="@+id/etMfaCode"
@@ -20,14 +21,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/input_bg"
-        android:padding="10dp"/>
+        android:padding="12dp"
+        android:textColor="@color/brand_on_surface"
+        android:textStyle="bold" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnVerify"
+        style="@style/Widget.MaterialComponents.Button"
         android:text="Verify"
         android:layout_marginTop="16dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/btn_black_bg"
-        android:textColor="#FFF"/>
+        app:backgroundTint="@color/brand_primary"
+        app:cornerRadius="12dp"
+        android:textColor="@color/white" />
 </LinearLayout>
