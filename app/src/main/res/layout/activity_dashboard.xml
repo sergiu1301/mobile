@@ -1,148 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_screen_gradient"
-    android:padding="20dp"
-    android:fillViewport="true">
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:background="#FAFAFA"
+    android:padding="24dp">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/tvWelcome"
+        android:text="Welcome back, Traveler! 🌍"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="#000"
+        android:layout_marginBottom="8dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:id="@+id/tvGuestBanner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:text="You are browsing as Guest — sign in to save your trips ✈️"
+        android:background="@android:color/darker_gray"
+        android:textColor="@android:color/white"
+        android:padding="8dp"
+        android:textAlignment="center"
+        android:visibility="gone" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="20dp"
-            android:background="@drawable/bg_surface_card"
-            android:elevation="6dp">
+    <TextView
+        android:id="@+id/tvRole"
+        android:text="Role: user"
+        android:textSize="16sp"
+        android:textColor="#666"
+        android:layout_marginBottom="24dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
 
-            <TextView
-                android:id="@+id/tvWelcome"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Welcome back, Traveler!"
-                android:textColor="@color/brand_on_surface"
-                android:textSize="22sp"
-                android:textStyle="bold" />
+    <Button
+        android:id="@+id/btnGoToTrips"
+        android:text="My Trips"
+        android:background="@drawable/btn_black_bg"
+        android:textColor="#FFF"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp" />
 
-            <TextView
-                android:id="@+id/tvRole"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Role: user"
-                android:textColor="@color/brand_muted"
-                android:textSize="15sp"
-                android:layout_marginTop="4dp" />
+    <Button
+        android:id="@+id/btnManageUsers"
+        android:text="Manage Users (Admin)"
+        android:background="@drawable/btn_black_bg"
+        android:textColor="#FFF"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/tvGuestBanner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="You are browsing as Guest — sign in to save your trips"
-                android:textColor="@color/white"
-                android:background="@color/brand_accent"
-                android:padding="12dp"
-                android:layout_marginTop="12dp"
-                android:visibility="gone"
-                android:gravity="center"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="16dp">
-
-                <ImageView
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:src="@drawable/ic_weather_sun"
-                    android:contentDescription="Travel icon"
-                    app:tint="@color/brand_primary" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Plan, book and monitor your trips with a clean, premium dashboard."
-                    android:textColor="@color/brand_muted"
-                    android:textSize="14sp"
-                    android:layout_marginStart="12dp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_surface_card"
-            android:padding="20dp"
-            android:elevation="6dp"
-            android:layout_marginTop="16dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Quick actions"
-                android:textColor="@color/brand_on_surface"
-                android:textStyle="bold"
-                android:textSize="18sp"
-                android:layout_marginBottom="12dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnGoToTrips"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="My Trips"
-                android:textAllCaps="false"
-                android:textSize="16sp"
-                android:layout_marginBottom="12dp"
-                app:cornerRadius="14dp"
-                app:icon="@drawable/ic_weather_cloud"
-                app:iconTint="@color/white"
-                app:iconPadding="12dp"
-                app:backgroundTint="@color/brand_primary" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnManageUsers"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Manage Users (Admin)"
-                android:textAllCaps="false"
-                android:textSize="16sp"
-                android:layout_marginBottom="12dp"
-                android:visibility="gone"
-                app:cornerRadius="14dp"
-                app:strokeColor="@color/brand_primary"
-                app:strokeWidth="2dp"
-                app:icon="@drawable/ic_logout"
-                app:iconGravity="textStart"
-                app:iconPadding="10dp"
-                app:iconTint="@color/brand_primary"
-                app:backgroundTint="@color/white"
-                android:textColor="@color/brand_primary" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLogout"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Settings"
-                android:textAllCaps="false"
-                android:textSize="16sp"
-                app:cornerRadius="14dp"
-                app:icon="@drawable/ic_logout"
-                app:iconTint="@color/brand_muted"
-                app:iconPadding="12dp"
-                app:backgroundTint="@color/brand_surface"
-                android:textColor="@color/brand_on_surface" />
-        </LinearLayout>
-    </LinearLayout>
-</ScrollView>
+    <Button
+        android:id="@+id/btnLogout"
+        android:background="@drawable/btn_black_bg"
+        android:text="Settings"
+        android:textColor="#FFF"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp" />
+</LinearLayout>

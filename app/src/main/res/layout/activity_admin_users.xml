@@ -1,29 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="20dp"
-    android:background="@drawable/bg_screen_gradient"
+    android:padding="16dp"
+    android:background="#F7F7F7"
     tools:context=".ui.activities.AdminUsersActivity">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@drawable/bg_surface_card"
-        android:padding="18dp"
-        android:elevation="8dp"
-        android:layout_marginBottom="12dp">
+        android:paddingBottom="12dp"
+        android:background="@drawable/bg_card"
+        android:padding="16dp"
+        android:elevation="2dp"
+        android:layout_marginBottom="10dp">
 
         <TextView
             android:id="@+id/tvAdminTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Manage Users"
-            android:textColor="@color/brand_on_surface"
+            android:text="Manage Users 👥"
+            android:textColor="#000"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -32,23 +32,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Loading admin info..."
-            android:textColor="@color/brand_muted"
+            android:textColor="#444"
             android:textSize="14sp"
             android:paddingTop="4dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnAddTripAdmin"
-            style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Add a trip"
-            android:textAllCaps="false"
-            app:backgroundTint="@color/brand_secondary"
-            app:cornerRadius="14dp"
-            android:layout_marginTop="12dp"
-            app:icon="@drawable/ic_weather_sun"
-            app:iconTint="@color/white"
-            app:iconPadding="12dp" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView

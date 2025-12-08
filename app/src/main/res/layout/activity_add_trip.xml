@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="20dp"
-    android:background="@drawable/bg_screen_gradient"
-    android:fillViewport="true">
+    android:padding="24dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:orientation="vertical">
 
         <TextView
             android:id="@+id/tvAddEditTitle"
@@ -20,129 +16,87 @@
             android:text="Add Trip"
             android:textSize="28sp"
             android:textStyle="bold"
-            android:textColor="@color/white"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="24dp"
+            android:gravity="center"
+            android:layout_gravity="center_horizontal" />
 
-        <LinearLayout
+        <TextView
+            android:text="Trip Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <EditText
+            android:id="@+id/etTripTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_surface_card"
-            android:elevation="8dp">
+            android:hint="e.g. Summer in Rome"
+            android:layout_marginBottom="16dp" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Trip details"
-                android:textColor="@color/brand_on_surface"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="12dp" />
+        <TextView
+            android:text="Destination"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Trip title"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="12dp">
+        <EditText
+            android:id="@+id/etDestination"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. Rome, Italy"
+            android:layout_marginBottom="16dp" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etTripTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textCapWords"
-                    android:hint="Summer in Rome" />
-            </com.google.android.material.textfield.TextInputLayout>
+        <TextView
+            android:text="Start Date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Destination"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="12dp">
+        <EditText
+            android:id="@+id/etStartDate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. 10 Jun 2025"
+            android:layout_marginBottom="16dp" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etDestination"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textCapWords"
-                    android:hint="Rome, Italy" />
-            </com.google.android.material.textfield.TextInputLayout>
+        <TextView
+            android:text="End Date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:layout_marginBottom="12dp">
+        <EditText
+            android:id="@+id/etEndDate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. 18 Jun 2025"
+            android:layout_marginBottom="16dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="Start date"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_marginEnd="8dp">
+        <TextView
+            android:text="Notes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etStartDate"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:hint="10 Jun 2025" />
-                </com.google.android.material.textfield.TextInputLayout>
+        <EditText
+            android:id="@+id/etNotes"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:hint="Optional notes"
+            android:gravity="top"
+            android:layout_marginBottom="24dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="End date"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_marginStart="8dp">
+        <Button
+            android:id="@+id/btnSaveTrip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Save Trip"
+            android:background="#000000"
+            android:textColor="#FFFFFF"
+            android:padding="12dp" />
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etEndDate"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:hint="18 Jun 2025" />
-                </com.google.android.material.textfield.TextInputLayout>
-            </LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Trip will sync automatically when online."
+            android:textSize="14sp"
+            android:gravity="center"
+            android:layout_marginTop="16dp" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Notes"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="16dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etNotes"
-                    android:layout_width="match_parent"
-                    android:layout_height="120dp"
-                    android:gravity="top"
-                    android:hint="Optional notes" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSaveTrip"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Save Trip"
-                android:textAllCaps="false"
-                app:backgroundTint="@color/brand_primary"
-                app:cornerRadius="14dp"
-                android:padding="14dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Trips sync automatically when you're online."
-                android:textColor="@color/brand_muted"
-                android:textSize="14sp"
-                android:gravity="center"
-                android:layout_marginTop="14dp" />
-        </LinearLayout>
     </LinearLayout>
 </ScrollView>
