@@ -18,7 +18,6 @@ import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
 import com.example.travelmate.data.User
-import com.example.travelmate.network.ApiService
 import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.repository.UserRepository
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -90,8 +89,6 @@ class LoginActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-        ApiService.setTokenProvider { securePrefs.getString("auth_token", null) }
-
         val db = TripDatabase.getDatabase(this)
         userRepository = UserRepository(db.userDao())
 
@@ -125,9 +122,7 @@ class LoginActivity : AppCompatActivity() {
         }
 
         btnGoogle.setOnClickListener {
-            googleSignInClient.signOut().addOnCompleteListener {
-                startActivityForResult(googleSignInClient.signInIntent, RC_SIGN_IN)
-            }
+            startActivityForResult(googleSignInClient.signInIntent, RC_SIGN_IN)
         }
 
         btnBiometric.setOnClickListener {

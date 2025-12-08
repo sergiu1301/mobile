@@ -12,7 +12,6 @@ data class Trip(
     val endDate: String,
     val notes: String,
     val ownerEmail: String,
-    var pendingSync: Boolean = false,
     var weatherTemp: String? = null,
     var weatherDescription: String? = null
 )

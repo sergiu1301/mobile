@@ -13,7 +13,6 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
-import com.example.travelmate.network.ApiService
 import com.example.travelmate.repository.UserRepository
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
@@ -100,11 +99,8 @@ class SettingsActivity : AppCompatActivity() {
                 securePrefs.edit().apply {
                     remove("email")
                     remove("role")
-                    remove("auth_token")
                     apply()
                 }
-
-                ApiService.clearTokenProvider()
 
                 Snackbar.make(tvLogout, "Logged out successfully 👋", Snackbar.LENGTH_SHORT)
                     .setBackgroundTint(ContextCompat.getColor(this@SettingsActivity, android.R.color.holo_red_dark))
