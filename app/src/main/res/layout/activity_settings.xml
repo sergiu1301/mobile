@@ -2,37 +2,36 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
-    android:background="@drawable/bg_screen_gradient"
-    android:padding="20dp"
+    android:background="@android:color/background_light"
+    android:padding="24dp"
     android:gravity="center_horizontal"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <TextView
         android:id="@+id/tvSettingsTitle"
-        android:text="Settings"
-        android:textSize="26sp"
+        android:text="Settings ⚙️"
+        android:textSize="24sp"
         android:textStyle="bold"
-        android:textColor="@color/white"
-        android:layout_marginBottom="20dp"
+        android:textColor="@android:color/black"
+        android:layout_marginBottom="24dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
     <LinearLayout
         android:id="@+id/sectionBiometric"
         android:orientation="horizontal"
-        android:padding="18dp"
+        android:padding="16dp"
         android:layout_marginBottom="16dp"
-        android:background="@drawable/bg_surface_card"
-        android:elevation="6dp"
+        android:background="@drawable/bg_card"
+        android:elevation="4dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
         <TextView
             android:text="Use biometrics"
             android:textSize="16sp"
-            android:textColor="@color/brand_on_surface"
-            android:textStyle="bold"
+            android:textColor="@android:color/black"
             android:layout_weight="1"
             android:layout_width="0dp"
             android:layout_height="wrap_content" />
@@ -40,16 +39,14 @@
         <Switch
             android:id="@+id/switchBiometrics"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:thumbTint="@color/brand_primary"
-            android:trackTint="@color/purple_200" />
+            android:layout_height="wrap_content" />
     </LinearLayout>
 
     <LinearLayout
         android:orientation="horizontal"
-        android:padding="18dp"
-        android:background="@drawable/bg_surface_card"
-        android:elevation="6dp"
+        android:padding="16dp"
+        android:background="@drawable/bg_card"
+        android:elevation="4dp"
         android:gravity="center_vertical"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
@@ -60,14 +57,14 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:layout_marginEnd="12dp"
-            app:tint="@color/brand_accent" />
+            app:tint="@android:color/holo_red_dark" />
 
         <TextView
             android:id="@+id/btnLogout"
             android:text="Log out"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="@color/brand_accent"
+            android:textColor="@android:color/holo_red_dark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
     </LinearLayout>
