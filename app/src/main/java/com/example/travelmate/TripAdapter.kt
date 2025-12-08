@@ -26,6 +26,7 @@ class TripAdapter(
         val tvWeather: TextView = itemView.findViewById(R.id.tvTripWeather)
         val ivWeatherIcon: ImageView = itemView.findViewById(R.id.ivWeatherIcon)
         val btnDelete: ImageButton = itemView.findViewById(R.id.btnDeleteTrip) // 🆕 buton delete
+        val tvPendingBadge: TextView = itemView.findViewById(R.id.tvPendingBadge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TripViewHolder {
@@ -40,6 +41,9 @@ class TripAdapter(
         holder.tvTitle.text = trip.title
         holder.tvDestination.text = "📍 ${trip.destination}"
         holder.tvDates.text = "🗓️ ${trip.startDate} → ${trip.endDate}"
+
+        holder.tvPendingBadge.visibility = if (trip.pendingSync) View.VISIBLE else View.GONE
+        holder.cardContainer.alpha = if (trip.pendingSync) 0.85f else 1f
 
         if (trip.weatherTemp != null && trip.weatherDescription != null) {
             holder.tvWeather.text = "${trip.weatherTemp}, ${trip.weatherDescription}"

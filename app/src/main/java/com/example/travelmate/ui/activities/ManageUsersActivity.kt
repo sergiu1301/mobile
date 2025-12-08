@@ -26,6 +26,7 @@ class ManageUsersActivity : AppCompatActivity() {
     private lateinit var tvNoUsers: TextView
     private lateinit var btnLogout: Button
     private lateinit var tvAdminTitle: TextView
+    private lateinit var btnAddLocation: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +39,7 @@ class ManageUsersActivity : AppCompatActivity() {
         tvNoUsers = findViewById(R.id.tvNoUsers)
         btnLogout = findViewById(R.id.btnLogout)
         tvAdminTitle = findViewById(R.id.tvAdminTitle)
+        btnAddLocation = findViewById(R.id.btnAddLocation)
 
         val db = TripDatabase.getDatabase(this)
         userRepository = UserRepository(db.userDao())
@@ -74,6 +76,10 @@ class ManageUsersActivity : AppCompatActivity() {
 
         btnLogout.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        btnAddLocation.setOnClickListener {
+            startActivity(Intent(this, AddTripActivity::class.java))
         }
     }
 
