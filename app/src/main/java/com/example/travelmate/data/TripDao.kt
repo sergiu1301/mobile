@@ -28,10 +28,4 @@ interface TripDao {
 
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     suspend fun getTripById(tripId: Int): Trip?
-
-    @Query("SELECT * FROM trips WHERE pendingSync = 1")
-    suspend fun getPendingTrips(): List<Trip>
-
-    @Query("UPDATE trips SET pendingSync = :pending WHERE id = :id")
-    suspend fun updatePendingStatus(id: Int, pending: Boolean)
 }

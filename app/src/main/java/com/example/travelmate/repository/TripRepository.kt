@@ -17,12 +17,6 @@ class TripRepository(private val tripDao: TripDao) {
         tripDao.updateWeather(id, temp, description)
     }
 
-    suspend fun getPendingTrips(): List<Trip> = tripDao.getPendingTrips()
-
-    suspend fun updatePendingStatus(id: Int, pending: Boolean) {
-        tripDao.updatePendingStatus(id, pending)
-    }
-
     suspend fun getTripsForUser(email: String): List<Trip> {
         return tripDao.getTripsByUser(email)
     }

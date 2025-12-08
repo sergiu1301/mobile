@@ -136,8 +136,7 @@ class AddTripActivity : AppCompatActivity() {
             startDate = startDate,
             endDate = endDate,
             notes = notes,
-            ownerEmail = ownerEmail,
-            pendingSync = !isOnline()
+            ownerEmail = ownerEmail
         )
 
         if (isOnline()) {
@@ -178,8 +177,7 @@ class AddTripActivity : AppCompatActivity() {
             startDate = startDate,
             endDate = endDate,
             notes = notes,
-            ownerEmail = ownerEmail,
-            pendingSync = !isOnline()
+            ownerEmail = ownerEmail
         )
 
         if (isOnline()) {
