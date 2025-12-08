@@ -1,5 +1,6 @@
 package com.example.travelmate.ui.activities
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.widget.TextView
@@ -10,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.google.android.material.button.MaterialButton
 import com.example.travelmate.R
 import com.example.travelmate.UserAdapter
 import com.example.travelmate.data.TripDatabase
@@ -24,6 +26,7 @@ class AdminUsersActivity : AppCompatActivity() {
     private lateinit var recyclerUsers: RecyclerView
     private lateinit var repo: UserRepository
     private lateinit var tvAdminStatus: TextView
+    private lateinit var btnAddTripAdmin: MaterialButton
     private lateinit var networkMonitor: NetworkMonitor
 
     private var lastNetworkState: Boolean? = null
@@ -35,6 +38,7 @@ class AdminUsersActivity : AppCompatActivity() {
         recyclerUsers = findViewById(R.id.recyclerUsers)
         recyclerUsers.layoutManager = LinearLayoutManager(this)
         tvAdminStatus = findViewById(R.id.tvAdminStatus)
+        btnAddTripAdmin = findViewById(R.id.btnAddTripAdmin)
 
         val db = TripDatabase.getDatabase(this)
         repo = UserRepository(db.userDao())
@@ -61,6 +65,10 @@ class AdminUsersActivity : AppCompatActivity() {
         }
 
         tvAdminStatus.text = "👤 Logged as admin: $loggedEmail"
+
+        btnAddTripAdmin.setOnClickListener {
+            startActivity(Intent(this, AddTripActivity::class.java))
+        }
 
         loadUsers()
 

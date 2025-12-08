@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="24dp"
-    android:background="@drawable/bg_dialog"
+    android:background="@drawable/bg_surface_card"
     android:gravity="center_horizontal">
 
     <ImageView
@@ -12,14 +12,14 @@
         android:layout_height="64dp"
         android:src="@drawable/ic_fingerprint"
         android:contentDescription="@string/cd_fingerprint_icon"
-        android:backgroundTint="#222222"
+        android:tint="@color/brand_primary"
         android:layout_marginBottom="16dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Enable Biometric Login?"
-        android:textColor="#111111"
+        android:textColor="@color/brand_on_surface"
         android:textStyle="bold"
         android:textSize="18sp"
         android:layout_marginBottom="8dp" />
@@ -27,21 +27,21 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Would you like to use your fingerprint or face to sign in faster next time?"
+        android:text="Use your fingerprint or face to sign in faster next time."
         android:textAlignment="center"
-        android:textColor="#666666"
+        android:textColor="@color/brand_muted"
         android:textSize="15sp"
         android:layout_marginBottom="24dp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnEnable"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Enable"
         android:textAllCaps="false"
-        android:background="@drawable/btn_black_bg"
-        android:backgroundTint="@null"
-        android:textColor="#FFFFFF"
+        app:backgroundTint="@color/brand_primary"
+        app:cornerRadius="14dp"
+        android:textColor="@color/white"
         android:paddingVertical="12dp"
         android:textSize="16sp" />
 
@@ -50,8 +50,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Not now"
-        android:textColor="#2962FF"
+        android:textColor="@color/brand_primary"
         android:layout_marginTop="16dp"
+        android:textStyle="bold"
         android:textSize="15sp" />
 
 </LinearLayout>
