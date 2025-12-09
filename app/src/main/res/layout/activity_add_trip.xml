@@ -1,102 +1,164 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="24dp">
+    android:background="#F5F6FA"
+    android:padding="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
 
+        <!-- TITLE -->
         <TextView
             android:id="@+id/tvAddEditTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Add Trip"
-            android:textSize="28sp"
+            android:textSize="30sp"
             android:textStyle="bold"
-            android:layout_marginBottom="24dp"
-            android:gravity="center"
-            android:layout_gravity="center_horizontal" />
+            android:textColor="#222222"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"/>
 
-        <TextView
-            android:text="Trip Title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
-        <EditText
-            android:id="@+id/etTripTitle"
+        <!-- FULL FORM CARD INCLUDING BUTTON -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/formCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="e.g. Summer in Rome"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="16dp"
+            app:cardElevation="10dp"
+            app:cardCornerRadius="30dp"
+            app:cardUseCompatPadding="true"
+            android:backgroundTint="#FFFFFF">
 
-        <TextView
-            android:text="Destination"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="28dp">
 
-        <EditText
-            android:id="@+id/etDestination"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="e.g. Rome, Italy"
-            android:layout_marginBottom="16dp" />
+                <!-- Trip Title -->
+                <TextView
+                    android:text="Trip Title"
+                    android:textColor="#555555"
+                    android:textSize="14sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"/>
 
-        <TextView
-            android:text="Start Date"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+                <EditText
+                    android:id="@+id/etTripTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="e.g. Summer in Rome"
+                    android:background="@drawable/bg_input_rounded"
+                    android:layout_marginBottom="18dp" />
 
-        <EditText
-            android:id="@+id/etStartDate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="e.g. 10 Jun 2025"
-            android:layout_marginBottom="16dp" />
+                <!-- Destination -->
+                <TextView
+                    android:text="Destination"
+                    android:textColor="#555555"
+                    android:textSize="14sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"/>
 
-        <TextView
-            android:text="End Date"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+                <EditText
+                    android:id="@+id/etDestination"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="e.g. Rome, Italy"
+                    android:background="@drawable/bg_input_rounded"
+                    android:layout_marginBottom="18dp" />
 
-        <EditText
-            android:id="@+id/etEndDate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="e.g. 18 Jun 2025"
-            android:layout_marginBottom="16dp" />
+                <!-- Start Date -->
+                <TextView
+                    android:text="Start Date"
+                    android:textColor="#555555"
+                    android:textSize="14sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"/>
 
-        <TextView
-            android:text="Notes"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+                <EditText
+                    android:id="@+id/etStartDate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="e.g. 10 Jun 2025"
+                    android:background="@drawable/bg_input_rounded"
+                    android:focusable="false"
+                    android:clickable="true"
+                    android:layout_marginBottom="18dp" />
 
-        <EditText
-            android:id="@+id/etNotes"
-            android:layout_width="match_parent"
-            android:layout_height="120dp"
-            android:hint="Optional notes"
-            android:gravity="top"
-            android:layout_marginBottom="24dp" />
+                <!-- End Date -->
+                <TextView
+                    android:text="End Date"
+                    android:textColor="#555555"
+                    android:textSize="14sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"/>
 
-        <Button
-            android:id="@+id/btnSaveTrip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Save Trip"
-            android:background="#000000"
-            android:textColor="#FFFFFF"
-            android:padding="12dp" />
+                <EditText
+                    android:id="@+id/etEndDate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="e.g. 18 Jun 2025"
+                    android:background="@drawable/bg_input_rounded"
+                    android:focusable="false"
+                    android:clickable="true"
+                    android:layout_marginBottom="18dp" />
 
+                <!-- Notes -->
+                <TextView
+                    android:text="Notes"
+                    android:textColor="#555555"
+                    android:textSize="14sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"/>
+
+                <EditText
+                    android:id="@+id/etNotes"
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:hint="Optional notes"
+                    android:gravity="top"
+                    android:background="@drawable/bg_input_rounded"
+                    android:layout_marginBottom="22dp" />
+
+                <!-- SAVE BUTTON (INSIDE CARD, ROUND, LIKE LOGIN) -->
+                <Button
+                    android:id="@+id/btnSaveTrip"
+                    android:layout_width="match_parent"
+                    android:layout_height="68dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/btn_black_bg"
+                    android:text="Save Trip"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:elevation="6dp"
+                    android:paddingVertical="14dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- FOOTER NOTE -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Trip will sync automatically when online."
             android:textSize="14sp"
+            android:textColor="#777777"
             android:gravity="center"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="4dp"/>
 
     </LinearLayout>
 </ScrollView>

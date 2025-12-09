@@ -5,7 +5,9 @@ import com.example.travelmate.data.TripDao
 
 class TripRepository(private val tripDao: TripDao) {
 
-    suspend fun insertTrip(trip: Trip) = tripDao.insertTrip(trip)
+    suspend fun insertTrip(trip: Trip): Long {
+        return tripDao.insertTrip(trip)
+    }
 
     suspend fun getAllTrips(): List<Trip> = tripDao.getAllTrips()
 
@@ -24,4 +26,10 @@ class TripRepository(private val tripDao: TripDao) {
     suspend fun getTripById(tripId: Int): Trip? {
         return tripDao.getTripById(tripId)
     }
+
+    suspend fun replaceAllForUser(email: String, newTrips: List<Trip>) {
+        tripDao.deleteAllForUser(email)
+        tripDao.insertMany(newTrips)
+    }
+
 }

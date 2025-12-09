@@ -1,72 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:orientation="vertical"
-    android:background="@android:color/background_light"
-    android:padding="24dp"
-    android:gravity="center_horizontal"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <TextView
-        android:id="@+id/tvSettingsTitle"
-        android:text="Settings ⚙️"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:textColor="@android:color/black"
-        android:layout_marginBottom="24dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+    android:layout_height="match_parent"
+    android:padding="20dp"
+    android:background="#F4F6F9">
 
     <LinearLayout
-        android:id="@+id/sectionBiometric"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="@drawable/bg_card"
-        android:elevation="4dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
+        <!-- Title -->
         <TextView
-            android:text="Use biometrics"
-            android:textSize="16sp"
-            android:textColor="@android:color/black"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content" />
-
-        <Switch
-            android:id="@+id/switchBiometrics"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:background="@drawable/bg_card"
-        android:elevation="4dp"
-        android:gravity="center_vertical"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <ImageView
-            android:id="@+id/icLogout"
-            android:src="@drawable/ic_logout"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginEnd="12dp"
-            app:tint="@android:color/holo_red_dark" />
-
-        <TextView
-            android:id="@+id/btnLogout"
-            android:text="Log out"
-            android:textSize="16sp"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textSize="28sp"
             android:textStyle="bold"
-            android:textColor="@android:color/holo_red_dark"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:textColor="#1A1A1A"
+            android:layout_marginBottom="20dp" />
+
+        <!-- CARD: BIOMETRICS -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardBiometrics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="-20dp"
+            android:backgroundTint="#FFFFFF"
+            app:cardElevation="10dp"
+            app:cardCornerRadius="18dp"
+            app:cardUseCompatPadding="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="20dp">
+
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:src="@drawable/ic_fingerprint"
+                    app:tint="#3B82F6" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Enable Biometrics Login"
+                    android:textSize="16sp"
+                    android:textColor="#333"
+                    android:layout_marginStart="16dp" />
+
+                <Switch
+                    android:id="@+id/switchBiometrics"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+
+        <!-- CARD: LOGOUT -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardLogout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="#FFFFFF"
+            app:cardElevation="10dp"
+            app:cardCornerRadius="18dp"
+            app:cardUseCompatPadding="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="20dp">
+
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:src="@drawable/ic_logout"
+                    app:tint="#DC2626" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Logout"
+                    android:textSize="16sp"
+                    android:textColor="#111"
+                    android:layout_marginStart="16dp" />
+
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:src="@drawable/ic_arrow_right"
+                    app:tint="#777" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
     </LinearLayout>
 
-</LinearLayout>
+</ScrollView>

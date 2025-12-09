@@ -1,6 +1,6 @@
 package com.example.travelmate.ui.activities
 
-import android.app.Dialog
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -17,17 +17,12 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
-import com.example.travelmate.data.User
-import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.repository.UserRepository
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.example.travelmate.network.RemoteServerClient
+import com.google.android.gms.auth.api.signin.*
+import com.google.android.gms.common.SignInButton
 import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.tasks.Task
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.*
 import java.util.concurrent.Executor
@@ -36,47 +31,142 @@ class LoginActivity : AppCompatActivity() {
 
     private lateinit var emailInputLayout: TextInputLayout
     private lateinit var passwordInputLayout: TextInputLayout
-    private lateinit var emailInput: TextInputEditText
-    private lateinit var passwordInput: TextInputEditText
+    private lateinit var emailInput: EditText
+    private lateinit var passwordInput: EditText
     private lateinit var btnLogin: Button
-    private lateinit var btnBiometric: ImageButton
-    private lateinit var tvBiometricHint: TextView
-    private lateinit var btnGoogle: com.google.android.gms.common.SignInButton
-    private lateinit var progressBar: ProgressBar
+    private lateinit var btnGoogle: SignInButton
+    private lateinit var btnGuest: TextView
     private lateinit var tvCreateAccount: TextView
+    private lateinit var progressBar: ProgressBar
 
-    private lateinit var userRepository: UserRepository
-    private lateinit var googleSignInClient: GoogleSignInClient
     private lateinit var biometricPrompt: BiometricPrompt
     private lateinit var promptInfo: BiometricPrompt.PromptInfo
+
     private lateinit var securePrefs: SharedPreferences
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private lateinit var userRepo: UserRepository
 
-    private lateinit var btnGuest: TextView
-
-    private val coroutineScope = CoroutineScope(Dispatchers.Main)
-    private val RC_SIGN_IN = 1001
-    private var biometricAvailable = false
+    private val RC_GOOGLE = 1001
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
+        initViews()
+        initSecureStorage()
+        initGoogleAuth()
+        initDatabase()
+        initBiometrics()
+
+        emailInput.addTextChangedListener(watcher)
+        passwordInput.addTextChangedListener(watcher)
+
+        // -------------------------------
+        // NORMAL LOGIN WITH SERVER CHECK
+        // -------------------------------
+        btnLogin.setOnClickListener {
+            if (!validateInputs()) return@setOnClickListener
+
+            checkServerBefore {
+                loginNormal()
+            }
+        }
+
+        // -------------------------------
+        // GOOGLE LOGIN WITH SERVER CHECK
+        // -------------------------------
+        btnGoogle.setOnClickListener {
+            checkServerBefore {
+                startActivityForResult(
+                    googleSignInClient.signInIntent,
+                    RC_GOOGLE
+                )
+            }
+        }
+
+        // -------------------------------
+        // GUEST LOGIN — NO SERVER CHECK
+        // -------------------------------
+        btnGuest.setOnClickListener {
+            checkServerBefore {
+                loginGuest()
+            }
+        }
+
+        // Register navigation
+        tvCreateAccount.setOnClickListener {
+            startActivity(Intent(this, SignupActivity::class.java))
+        }
+
+        // -------------------------------
+        // BIOMETRIC LOGIN CHECKS SERVER
+        // -------------------------------
+        val biometricCard = findViewById<View>(R.id.cardBiometric)
+
+        biometricCard.visibility =
+            if (securePrefs.getString("fingerprint_email_active", null) != null)
+                View.VISIBLE else View.GONE
+
+        biometricCard.setOnClickListener {
+            checkServerBefore {
+                biometricPrompt.authenticate(promptInfo)
+            }
+        }
+    }
+
+    // ======================================================================
+    // SERVER CHECK — UNIVERSAL FUNCTION
+    // ======================================================================
+    private fun checkServerBefore(action: () -> Unit) {
+        progressBar.visibility = View.VISIBLE
+
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                RemoteServerClient.ping()
+            }
+
+            progressBar.visibility = View.GONE
+
+            if (result.isFailure) {
+                Snackbar.make(
+                    btnLogin,
+                    "Server unavailable ❌ Please try again later",
+                    Snackbar.LENGTH_LONG
+                )
+                    .setBackgroundTint(
+                        ContextCompat.getColor(
+                            this@LoginActivity,
+                            android.R.color.holo_red_dark
+                        )
+                    )
+                    .setTextColor(ContextCompat.getColor(this@LoginActivity, android.R.color.white))
+                    .show()
+
+                return@launch
+            }
+
+            // Server OK → continue
+            action()
+        }
+    }
+
+
+    // ======================================================================
+    // INITIALIZATIONS
+    // ======================================================================
+    private fun initViews() {
         emailInputLayout = findViewById(R.id.inputLayoutEmail)
         passwordInputLayout = findViewById(R.id.inputLayoutPassword)
         emailInput = findViewById(R.id.etEmail)
         passwordInput = findViewById(R.id.etPassword)
         btnLogin = findViewById(R.id.btnLogin)
-        btnBiometric = findViewById(R.id.btnBiometric)
         btnGoogle = findViewById(R.id.btnGoogle)
-        progressBar = findViewById(R.id.progressBar)
-        tvCreateAccount = findViewById(R.id.tvCreateAccount)
-        tvBiometricHint = findViewById(R.id.tvBiometricHint)
         btnGuest = findViewById(R.id.btnGuest)
+        tvCreateAccount = findViewById(R.id.tvCreateAccount)
+        progressBar = findViewById(R.id.progressBar)
+    }
 
-        btnGuest.setOnClickListener {
-            continueAsGuest()
-        }
-
+    private fun initSecureStorage() {
         val masterKey = MasterKey.Builder(this)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -88,147 +178,51 @@ class LoginActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+    }
 
-        val db = TripDatabase.getDatabase(this)
-        userRepository = UserRepository(db.userDao())
-
+    private fun initGoogleAuth() {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .build()
-        googleSignInClient = GoogleSignIn.getClient(this, gso)
 
-        val biometricManager = BiometricManager.from(this)
-        val canAuth = biometricManager.canAuthenticate(
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
+    }
+
+    private fun initDatabase() {
+        val db = TripDatabase.getDatabase(this)
+        userRepo = UserRepository(db.userDao())
+    }
+
+    // ======================================================================
+    // BIOMETRICS
+    // ======================================================================
+    private fun initBiometrics() {
+        val manager = BiometricManager.from(this)
+
+        val canUse = manager.canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or
                     BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )
-        biometricAvailable = (canAuth == BiometricManager.BIOMETRIC_SUCCESS)
 
-        if (biometricAvailable) setupFingerprintPrompt()
-        else {
-            btnBiometric.visibility = View.GONE
-            tvBiometricHint.visibility = View.GONE
-        }
+        if (canUse != BiometricManager.BIOMETRIC_SUCCESS)
+            return
 
-        emailInput.addTextChangedListener(validationWatcher)
-        passwordInput.addTextChangedListener(validationWatcher)
+        val executor = ContextCompat.getMainExecutor(this)
 
-        tvCreateAccount.setOnClickListener {
-            startActivity(Intent(this, SignupActivity::class.java))
-        }
-
-        btnLogin.setOnClickListener {
-            if (validateInputs()) performLogin()
-        }
-
-        btnGoogle.setOnClickListener {
-            startActivityForResult(googleSignInClient.signInIntent, RC_SIGN_IN)
-        }
-
-        btnBiometric.setOnClickListener {
-            val activeEmail = securePrefs.getString("fingerprint_email_active", null)
-            if (activeEmail != null && securePrefs.getBoolean("biometric_enabled", false)) {
-                securePrefs.edit().putString("email", activeEmail).apply()
-                biometricPrompt.authenticate(promptInfo)
-            } else {
-                Snackbar.make(btnLogin, "Fingerprint not enabled yet ⚠️", Snackbar.LENGTH_SHORT).show()
-            }
-        }
-
-        val fingerprintEmail = securePrefs.getString("fingerprint_email_active", null)
-        val biometricEnabled = securePrefs.getBoolean("biometric_enabled", false)
-
-        if (biometricAvailable && biometricEnabled && !fingerprintEmail.isNullOrEmpty()) {
-            lifecycleScope.launch {
-                val user = withContext(Dispatchers.IO) {
-                    userRepository.getUserByEmail(fingerprintEmail)
-                }
-
-                if (user != null && user.useBiometrics && !user.isBlocked) {
-                    securePrefs.edit().putString("email", user.email).apply()
-                    biometricPrompt.authenticate(promptInfo)
-                } else {
-                    securePrefs.edit().apply {
-                        remove("biometric_enabled")
-                        remove("fingerprint_email_active")
-                        apply()
-                    }
-                }
-            }
-        }
-    }
-
-    private fun continueAsGuest() {
-        securePrefs.edit().apply {
-            putString("role", "guest")
-            putString("email", "guest@local")
-            apply()
-        }
-
-        Snackbar.make(btnLogin, "Continuing as guest 👤", Snackbar.LENGTH_SHORT)
-            .setBackgroundTint(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-            .show()
-
-        startActivity(Intent(this, DashboardActivity::class.java))
-        finish()
-    }
-
-    private fun validateFingerprintUser(onSuccess: () -> Unit) {
-        coroutineScope.launch {
-            val email = securePrefs.getString("email", null)
-            if (email.isNullOrEmpty()) {
-                Snackbar.make(btnLogin, "No saved user found. Please log in again.", Snackbar.LENGTH_SHORT).show()
-                return@launch
-            }
-
-            val user = withContext(Dispatchers.IO) { userRepository.getUserByEmail(email) }
-            if (user == null) {
-                Snackbar.make(btnLogin, "Account not found. Please log in again.", Snackbar.LENGTH_SHORT).show()
-                return@launch
-            }
-
-            if (user.isBlocked) {
-                Snackbar.make(btnLogin, "Your account is blocked ❌", Snackbar.LENGTH_LONG)
-                    .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
-                    .show()
-                return@launch
-            }
-
-            securePrefs.edit().apply {
-                putString("email", user.email)
-                putString("role", user.role)
-                apply()
-            }
-
-            onSuccess()
-        }
-    }
-
-    private fun setupFingerprintPrompt() {
-        val executor: Executor = ContextCompat.getMainExecutor(this)
-        biometricPrompt = BiometricPrompt(this, executor,
+        biometricPrompt = BiometricPrompt(
+            this,
+            executor,
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    validateFingerprintUser {
-                        Snackbar.make(btnLogin, "Fingerprint login successful 👆", Snackbar.LENGTH_SHORT)
-                            .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_green_dark))
-                            .show()
-                        goToDashboard()
-                    }
+                    resumeBiometricSession()
                 }
-
-                override fun onAuthenticationFailed() {
-                    super.onAuthenticationFailed()
-                    Snackbar.make(btnLogin, "Authentication failed ❌", Snackbar.LENGTH_SHORT)
-                        .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
-                        .show()
-                }
-            })
+            }
+        )
 
         promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Biometric Login")
-            .setSubtitle("Use your fingerprint or device PIN to sign in")
+            .setSubtitle("Authenticate to continue")
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                         BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -236,216 +230,140 @@ class LoginActivity : AppCompatActivity() {
             .build()
     }
 
-    private val validationWatcher = object : TextWatcher {
-        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-        override fun afterTextChanged(s: Editable?) {}
-        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-            validateInputs(showError = false)
-        }
-    }
-
-    private fun validateInputs(showError: Boolean = true): Boolean {
-        var valid = true
-        val email = emailInput.text.toString().trim()
-        val password = passwordInput.text.toString().trim()
-
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            if (showError) emailInputLayout.error = "Invalid email format"
-            valid = false
-        } else emailInputLayout.error = null
-
-        if (password.length < 6) {
-            if (showError) passwordInputLayout.error = "Password must be at least 6 characters"
-            valid = false
-        } else passwordInputLayout.error = null
-
-        return valid
-    }
-
-    private fun performLogin() {
-        btnLogin.isEnabled = false
+    // ======================================================================
+    // LOGIN FLOW
+    // ======================================================================
+    private fun loginNormal() {
         progressBar.visibility = View.VISIBLE
+        btnLogin.isEnabled = false
 
-        coroutineScope.launch {
-            val email = emailInput.text.toString().trim()
-            val password = passwordInput.text.toString().trim()
+        val email = emailInput.text.toString()
+        val pass = passwordInput.text.toString()
 
-            val remoteLogin = withContext(Dispatchers.IO) {
-                RemoteServerClient.loginUser(email, password)
+        lifecycleScope.launch {
+            val serverResponse = withContext(Dispatchers.IO) {
+                RemoteServerClient.loginUser(email, pass)
             }
 
-            if (remoteLogin.isFailure) {
-                progressBar.visibility = View.GONE
-                btnLogin.isEnabled = true
-                Snackbar.make(btnLogin, "Server authentication failed ⚠️", Snackbar.LENGTH_LONG)
-                    .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
-                    .show()
+            if (serverResponse.isFailure) {
+                error("Authentication failed")
                 return@launch
             }
 
-            val tokenPayload = remoteLogin.getOrNull()
-            securePrefs.edit().apply {
-                putString("auth_token", tokenPayload?.token)
-                putString("role", tokenPayload?.role ?: "user")
-            }.apply()
+            val payload = serverResponse.getOrNull()!!
 
-            val user = withContext(Dispatchers.IO) { userRepository.loginUser(email, password) }
+            securePrefs.edit().putString("auth_token", payload.token).apply()
 
-            delay(600)
-            progressBar.visibility = View.GONE
-            btnLogin.isEnabled = true
-
-            val resolvedUser = user ?: withContext(Dispatchers.IO) {
-                userRepository.registerUser(email, password, role = tokenPayload?.role ?: "user", name = email)
-                userRepository.getUserByEmail(email)
+            val user = withContext(Dispatchers.IO) {
+                userRepo.getUserByEmail(email)
+                    ?: userRepo.registerUser(email, pass, payload.role, email)
             }
 
-            if (resolvedUser != null) {
-                if (resolvedUser.isBlocked) {
-                    Snackbar.make(btnLogin, "Your account is blocked ❌", Snackbar.LENGTH_LONG)
-                        .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
-                        .show()
-                    return@launch
-                }
+            saveSession(user.email, user.role)
 
-                saveUserSession(resolvedUser)
-                showMfaDialog(resolvedUser)
+            if (!user.useBiometrics) askEnableBiometrics(user.email)
+
+            goDashboard()
+        }
+    }
+
+    private fun resumeBiometricSession() {
+        val email = securePrefs.getString("fingerprint_email_active", null) ?: return
+
+        lifecycleScope.launch {
+            val user = withContext(Dispatchers.IO) { userRepo.getUserByEmail(email) }
+
+            if (user != null && !user.isBlocked) {
+                saveSession(user.email, user.role)
+                goDashboard()
             } else {
-                Snackbar.make(btnLogin, "Invalid credentials ❌", Snackbar.LENGTH_LONG)
-                    .setBackgroundTint(ContextCompat.getColor(this@LoginActivity, android.R.color.holo_red_dark))
-                    .show()
+                Snackbar.make(btnLogin, "Biometric login failed ❌", Snackbar.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun saveUserSession(user: User) {
+    // ======================================================================
+    // HELPERS
+    // ======================================================================
+    private fun saveSession(email: String, role: String) {
         securePrefs.edit().apply {
-            putString("email", user.email)
-            putString("role", user.role)
-            apply()
-        }
+            putString("email", email)
+            putString("role", role)
+        }.apply()
     }
 
-    private fun showMfaDialog(user: User) {
-        val dialog = Dialog(this)
-        dialog.setContentView(R.layout.dialog_mfa)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val etCode = dialog.findViewById<EditText>(R.id.etMfaCode)
-        val btnVerify = dialog.findViewById<Button>(R.id.btnVerify)
-
-        btnVerify.setOnClickListener {
-            val code = etCode.text.toString().trim()
-            if (code == "123456") {
-                dialog.dismiss()
-
-                lifecycleScope.launch {
-                    val freshUser = withContext(Dispatchers.IO) {
-                        userRepository.getUserByEmail(user.email)
-                    }
-
-                    if (freshUser?.useBiometrics == true && biometricAvailable) {
-                        val fingerprintEmail = securePrefs.getString("fingerprint_email_active", null)
-                        val biometricEnabled = securePrefs.getBoolean("biometric_enabled", false)
-
-                        if (biometricEnabled && fingerprintEmail == user.email) {
-                            goToDashboard()
-                        } else {
-                            showEnableFingerprintPrompt(user)
-                        }
-                    } else {
-                        goToDashboard()
-                    }
-                }
-            } else {
-                Snackbar.make(btnLogin, "Invalid MFA code ❌", Snackbar.LENGTH_SHORT)
-                    .setBackgroundTint(ContextCompat.getColor(this, android.R.color.holo_red_dark))
-                    .show()
-            }
-        }
-
-        dialog.show()
-    }
-
-    private fun showEnableFingerprintPrompt(user: User) {
-        val dialog = BottomSheetDialog(this)
-        val view = layoutInflater.inflate(R.layout.sheet_enable_biometric, null)
-        dialog.setContentView(view)
-
-        val btnEnable = view.findViewById<Button>(R.id.btnEnable)
-        val btnNotNow = view.findViewById<TextView>(R.id.btnNotNow)
-
-        btnEnable.setOnClickListener {
-            securePrefs.edit().apply {
-                putBoolean("biometric_enabled", true)
-                putString("fingerprint_email_active", user.email)
-                apply()
-            }
-            dialog.dismiss()
-            Snackbar.make(btnLogin, "Fingerprint login enabled 👆", Snackbar.LENGTH_SHORT)
-                .setBackgroundTint(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-                .show()
-            biometricPrompt.authenticate(promptInfo)
-        }
-
-        btnNotNow.setOnClickListener {
-            dialog.dismiss()
-            Snackbar.make(btnLogin, "Maybe later 😌", Snackbar.LENGTH_SHORT)
-                .setBackgroundTint(ContextCompat.getColor(this, android.R.color.darker_gray))
-                .show()
-            goToDashboard()
-        }
-
-        dialog.show()
-    }
-
-    private fun goToDashboard() {
-        val role = securePrefs.getString("role", "user")
-        val intent = if (role == "admin") {
-            Intent(this, ManageUsersActivity::class.java)
-        } else {
-            Intent(this, DashboardActivity::class.java)
-        }
-        startActivity(intent)
+    private fun goDashboard() {
+        startActivity(Intent(this, DashboardActivity::class.java))
         finish()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == RC_SIGN_IN) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            handleSignInResult(task)
+    private fun loginGuest() {
+        securePrefs.edit().apply {
+            putString("email", "guest@local")
+            putString("role", "guest")
+        }.apply()
+
+        startActivity(Intent(this, DashboardActivity::class.java))
+        finish()
+    }
+
+    private fun error(msg: String) {
+        progressBar.visibility = View.GONE
+        btnLogin.isEnabled = true
+        Snackbar.make(btnLogin, "$msg ❌", Snackbar.LENGTH_LONG).show()
+    }
+
+    // ======================================================================
+    // VALIDATION
+    // ======================================================================
+    private val watcher = object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+        override fun afterTextChanged(s: Editable?) {}
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+            validateInputs(false)
         }
     }
 
-    private fun handleSignInResult(task: Task<com.google.android.gms.auth.api.signin.GoogleSignInAccount>) {
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val email = account?.email ?: return
-            val name = account.displayName ?: "Traveler"
+    private fun askEnableBiometrics(email: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Enable biometric login?")
+            .setMessage("Use fingerprint for faster and more secure login.")
+            .setCancelable(false)
+            .setPositiveButton("Enable") { _, _ ->
 
-            securePrefs.edit().apply {
-                putString("email", email)
-                putString("role", "user")
-                apply()
-            }
-
-            coroutineScope.launch(Dispatchers.IO) {
-                val existing = userRepository.getUserByEmail(email)
-                if (existing == null) {
-                    userRepository.registerUser(email, "google_auth", role = "user", email)
+                // Save preference in local database
+                lifecycleScope.launch(Dispatchers.IO) {
+                    userRepo.updateUseBiometrics(email, true)
                 }
+
+                // Save active biometric session for next time
+                securePrefs.edit()
+                    .putString("fingerprint_email_active", email)
+                    .apply()
+
+                Snackbar.make(btnLogin, "Biometrics enabled 🔐", Snackbar.LENGTH_SHORT).show()
             }
+            .setNegativeButton("No thanks") { _, _ -> }
+            .show()
+    }
 
-            Snackbar.make(btnLogin, "Welcome $name 🎉", Snackbar.LENGTH_SHORT)
-                .setBackgroundTint(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-                .show()
-            goToDashboard()
 
-        } catch (e: ApiException) {
-            Snackbar.make(btnLogin, "Google Sign-In failed: ${e.statusCode}", Snackbar.LENGTH_SHORT)
-                .setBackgroundTint(ContextCompat.getColor(this, android.R.color.holo_red_dark))
-                .show()
-        }
+    private fun validateInputs(showError: Boolean = true): Boolean {
+        val email = emailInput.text.toString().trim()
+        val pass = passwordInput.text.toString().trim()
+
+        var ok = true
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            if (showError) emailInputLayout.error = "Invalid email"
+            ok = false
+        } else emailInputLayout.error = null
+
+        if (pass.length < 6) {
+            if (showError) passwordInputLayout.error = "Min 6 chars"
+            ok = false
+        } else passwordInputLayout.error = null
+
+        return ok
     }
 }

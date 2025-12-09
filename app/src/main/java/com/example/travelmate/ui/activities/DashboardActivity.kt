@@ -3,10 +3,8 @@ package com.example.travelmate.ui.activities
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
@@ -14,25 +12,27 @@ import com.google.android.material.snackbar.Snackbar
 
 class DashboardActivity : AppCompatActivity() {
 
-    private lateinit var tvWelcome: TextView
-    private lateinit var tvRole: TextView
-    private lateinit var btnGoToTrips: Button
-    private lateinit var btnManageUsers: Button
-    private lateinit var btnLogout: Button
+    private lateinit var tvWelcomeUser: TextView
+    private lateinit var tvUserRole: TextView
 
-    private lateinit var tvGuestBanner: TextView
+    private lateinit var cardUsers: View
+    private lateinit var cardTrips: View
+    private lateinit var cardSettings: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_dashboard)
 
-        tvWelcome = findViewById(R.id.tvWelcome)
-        tvRole = findViewById(R.id.tvRole)
-        btnGoToTrips = findViewById(R.id.btnGoToTrips)
-        btnManageUsers = findViewById(R.id.btnManageUsers)
-        btnLogout = findViewById(R.id.btnLogout)
-        tvGuestBanner = findViewById(R.id.tvGuestBanner)
+        // USER INFO CARD
+        tvWelcomeUser = findViewById(R.id.tvWelcomeUser)
+        tvUserRole = findViewById(R.id.tvUserRole)
 
+        // CARDS
+        cardUsers = findViewById(R.id.cardUsers)
+        cardTrips = findViewById(R.id.cardTrips)
+        cardSettings = findViewById(R.id.cardSettings)
+
+        // SECURE PREFS --------------------------------------------------------------
         val masterKey = MasterKey.Builder(this)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -48,36 +48,54 @@ class DashboardActivity : AppCompatActivity() {
         val email = securePrefs.getString("email", "Traveler")
         val role = securePrefs.getString("role", "user")
 
-        tvWelcome.text = "Welcome back, $email! 🌍"
-        tvRole.text = "Role: ${role?.replaceFirstChar { it.uppercase() }}"
+        // SET USER INFO --------------------------------------------------------------
+        tvWelcomeUser.text = "Welcome, $email 👋"
+        tvUserRole.text = "Role: ${role?.replaceFirstChar { it.uppercase() }}"
 
+        // ROLE-BASED UI --------------------------------------------------------------
         when (role) {
+
+            // ⭐ GUEST MODE ---------------------------------------------------------
             "guest" -> {
-                tvGuestBanner.visibility = View.VISIBLE
-                findViewById<View>(R.id.btnGoToTrips)?.isEnabled = false
-            }
-            "admin" -> {
-                btnManageUsers.visibility = View.VISIBLE
-                btnManageUsers.setOnClickListener {
-                    Snackbar.make(it, "Opening user management...", Snackbar.LENGTH_SHORT)
-                        .setBackgroundTint(ContextCompat.getColor(this, R.color.teal_700))
-                        .show()
-                    startActivity(Intent(this, AdminUsersActivity::class.java))
+                cardUsers.visibility = View.GONE
+
+                Snackbar.make(
+                    tvWelcomeUser,
+                    "Guest mode: trips are saved only locally.",
+                    Snackbar.LENGTH_LONG
+                ).show()
+
+                cardTrips.setOnClickListener {
+                    startActivity(Intent(this, TripListActivity::class.java))
                 }
             }
+
+            // ⭐ ADMIN MODE ---------------------------------------------------------
+            "admin" -> {
+                cardUsers.visibility = View.VISIBLE
+
+                cardUsers.setOnClickListener {
+                    Snackbar.make(it, "Opening user management...", Snackbar.LENGTH_SHORT).show()
+                    startActivity(Intent(this, AdminUsersActivity::class.java))
+                }
+
+                cardTrips.setOnClickListener {
+                    startActivity(Intent(this, TripListActivity::class.java))
+                }
+            }
+
+            // ⭐ NORMAL USER -------------------------------------------------------
             else -> {
-                btnManageUsers.visibility = View.GONE
+                cardUsers.visibility = View.GONE
+
+                cardTrips.setOnClickListener {
+                    startActivity(Intent(this, TripListActivity::class.java))
+                }
             }
         }
 
-        btnGoToTrips.setOnClickListener {
-            Snackbar.make(it, "Opening your trips...", Snackbar.LENGTH_SHORT)
-                .setBackgroundTint(ContextCompat.getColor(this, R.color.teal_700))
-                .show()
-            startActivity(Intent(this, TripListActivity::class.java))
-        }
-
-        btnLogout.setOnClickListener {
+        // SETTINGS CARD --------------------------------------------------------------
+        cardSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
     }

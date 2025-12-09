@@ -12,11 +12,13 @@ import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.Trip
 import com.example.travelmate.data.TripDatabase
+import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.network.WeatherService
 import com.example.travelmate.repository.TripRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,194 +28,147 @@ class AddTripActivity : AppCompatActivity() {
     private lateinit var repo: TripRepository
     private lateinit var dateFormat: SimpleDateFormat
 
+    private lateinit var etTripTitle: EditText
+    private lateinit var etDestination: EditText
+    private lateinit var etStartDate: EditText
+    private lateinit var etEndDate: EditText
+    private lateinit var etNotes: EditText
+    private lateinit var btnSaveTrip: Button
+    private lateinit var tvAddEditTitle: TextView
+
+    private var ownerEmail: String? = null
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_add_trip)
 
-        val etTripTitle = findViewById<EditText>(R.id.etTripTitle)
-        val etDestination = findViewById<EditText>(R.id.etDestination)
-        val etStartDate = findViewById<EditText>(R.id.etStartDate)
-        val etEndDate = findViewById<EditText>(R.id.etEndDate)
-        val etNotes = findViewById<EditText>(R.id.etNotes)
-        val btnSaveTrip = findViewById<Button>(R.id.btnSaveTrip)
-        val tvAddEditTitle = findViewById<TextView>(R.id.tvAddEditTitle)
-
-        val db = TripDatabase.getDatabase(this)
-        repo = TripRepository(db.tripDao())
-        dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+        bindViews()
+        init()
 
         etStartDate.setOnClickListener { showDatePicker(etStartDate) }
         etEndDate.setOnClickListener { showDatePicker(etEndDate) }
 
         editingTripId = intent.getIntExtra("edit_trip_id", -1).takeIf { it != -1 }
 
-        editingTripId?.let { tripId ->
-            lifecycleScope.launch(Dispatchers.IO) {
-                val trip = repo.getTripById(tripId)
-                trip?.let {
-                    withContext(Dispatchers.Main) {
-                        etTripTitle.setText(it.title)
-                        etDestination.setText(it.destination)
-                        etStartDate.setText(it.startDate)
-                        etEndDate.setText(it.endDate)
-                        etNotes.setText(it.notes)
-                        btnSaveTrip.text = "Update Trip"
-                        tvAddEditTitle.text = "Edit Trip"
-                    }
-                }
-            }
-        }
+        if (editingTripId != null) loadTripForEditing()
 
-        btnSaveTrip.setOnClickListener {
-            val title = etTripTitle.text.toString().trim()
-            val destination = etDestination.text.toString().trim()
-            val startDate = etStartDate.text.toString().trim()
-            val endDate = etEndDate.text.toString().trim()
-            val notes = etNotes.text.toString().trim()
-
-            val errorMsg = validateInputs(title, destination, startDate, endDate, notes)
-            if (errorMsg != null) {
-                Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val masterKey = MasterKey.Builder(this)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-
-            val securePrefs = EncryptedSharedPreferences.create(
-                this,
-                "secure_user_prefs",
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-
-            val currentEmail = securePrefs.getString("email", null)
-
-            if (currentEmail == null) {
-                Toast.makeText(this, "Session expired. Please login again.", Toast.LENGTH_SHORT).show()
-                finish()
-                return@setOnClickListener
-            }
-
-            lifecycleScope.launch {
-                if (editingTripId != null) {
-                    updateTrip(
-                        editingTripId!!,
-                        title,
-                        destination,
-                        startDate,
-                        endDate,
-                        notes,
-                        currentEmail
-                    )
-                } else {
-                    addNewTrip(
-                        title,
-                        destination,
-                        startDate,
-                        endDate,
-                        notes,
-                        currentEmail
-                    )
-                }
-            }
-        }
+        btnSaveTrip.setOnClickListener { handleSave() }
     }
 
-    private suspend fun addNewTrip(
-        title: String,
-        destination: String,
-        startDate: String,
-        endDate: String,
-        notes: String,
-        ownerEmail: String
-    ) {
-        val newTrip = Trip(
-            title = title,
-            destination = destination,
-            startDate = startDate,
-            endDate = endDate,
-            notes = notes,
-            ownerEmail = ownerEmail
-        )
-
-        if (isOnline()) {
-            val weather = withContext(Dispatchers.IO) {
-                WeatherService.getWeather(destination)
-            }
-            if (weather != null) {
-                newTrip.weatherTemp = weather.first
-                newTrip.weatherDescription = weather.second
-            }
-        }
-
-        repo.insertTrip(newTrip)
-
-        withContext(Dispatchers.Main) {
-            val message = if (isOnline())
-                "Trip added successfully ✅ (with weather)"
-            else
-                "Trip added (offline, will sync later ☁️)"
-            Toast.makeText(this@AddTripActivity, message, Toast.LENGTH_SHORT).show()
-            finish()
-        }
+    // ---------------------------------------------------------
+    private fun bindViews() {
+        etTripTitle = findViewById(R.id.etTripTitle)
+        etDestination = findViewById(R.id.etDestination)
+        etStartDate = findViewById(R.id.etStartDate)
+        etEndDate = findViewById(R.id.etEndDate)
+        etNotes = findViewById(R.id.etNotes)
+        btnSaveTrip = findViewById(R.id.btnSaveTrip)
+        tvAddEditTitle = findViewById(R.id.tvAddEditTitle)
     }
 
-    private suspend fun updateTrip(
-        id: Int,
-        title: String,
-        destination: String,
-        startDate: String,
-        endDate: String,
-        notes: String,
-        ownerEmail: String
-    ) {
-        val updatedTrip = Trip(
-            id = id,
-            title = title,
-            destination = destination,
-            startDate = startDate,
-            endDate = endDate,
-            notes = notes,
-            ownerEmail = ownerEmail
-        )
-
-        if (isOnline()) {
-            val weather = withContext(Dispatchers.IO) {
-                WeatherService.getWeather(destination)
-            }
-            if (weather != null) {
-                updatedTrip.weatherTemp = weather.first
-                updatedTrip.weatherDescription = weather.second
-            }
-        }
-
-        repo.updateTrip(updatedTrip)
-        withContext(Dispatchers.Main) {
-            Toast.makeText(this@AddTripActivity, "Trip updated successfully ✅", Toast.LENGTH_SHORT).show()
-            finish()
-        }
+    private fun init() {
+        repo = TripRepository(TripDatabase.getDatabase(this).tripDao())
+        dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+        loadOwnerEmail()
     }
 
-    private fun showDatePicker(targetEditText: EditText) {
-        val calendar = Calendar.getInstance()
-        val year = calendar.get(Calendar.YEAR)
-        val month = calendar.get(Calendar.MONTH)
-        val day = calendar.get(Calendar.DAY_OF_MONTH)
-
-        DatePickerDialog(
+    // ---------------------------------------------------------
+    // LOAD USER EMAIL (no more ownerId!)
+    // ---------------------------------------------------------
+    private fun loadOwnerEmail() {
+        val prefs = EncryptedSharedPreferences.create(
             this,
-            { _, selectedYear, selectedMonth, selectedDay ->
-                val selectedDate = Calendar.getInstance()
-                selectedDate.set(selectedYear, selectedMonth, selectedDay)
-                targetEditText.setText(dateFormat.format(selectedDate.time))
-            },
-            year, month, day
-        ).show()
+            "secure_user_prefs",
+            MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+
+        ownerEmail = prefs.getString("email", null)
+
+        if (ownerEmail == null) {
+            toast("Session expired. Please login again.")
+            finish()
+        }
     }
 
+    // ---------------------------------------------------------
+    // SERVER VALIDATION
+    // ---------------------------------------------------------
+    private suspend fun isServerAvailable(): Boolean {
+        val result = withContext(Dispatchers.IO) { RemoteServerClient.ping() }
+        return result.isSuccess
+    }
+
+    private suspend fun validateServerOrStop(): Boolean {
+        val ok = isServerAvailable()
+        if (!ok) {
+            withContext(Dispatchers.Main) {
+                toast("❌ Server unavailable — operation canceled")
+            }
+        }
+        return ok
+    }
+
+    private fun getAuthToken(): String? {
+        val prefs = EncryptedSharedPreferences.create(
+            this,
+            "secure_user_prefs",
+            MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+
+        return prefs.getString("auth_token", null)
+    }
+
+    // ---------------------------------------------------------
+    private fun loadTripForEditing() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val trip = repo.getTripById(editingTripId!!)
+            if (trip != null) {
+                withContext(Dispatchers.Main) {
+                    tvAddEditTitle.text = "Edit Trip"
+                    btnSaveTrip.text = "Update Trip"
+
+                    etTripTitle.setText(trip.title)
+                    etDestination.setText(trip.destination)
+                    etStartDate.setText(trip.startDate)
+                    etEndDate.setText(trip.endDate)
+                    etNotes.setText(trip.notes)
+                }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------
+    private fun handleSave() {
+        val title = etTripTitle.text.toString().trim()
+        val dest = etDestination.text.toString().trim()
+        val start = etStartDate.text.toString().trim()
+        val end = etEndDate.text.toString().trim()
+        val notes = etNotes.text.toString().trim()
+
+        val validationError = validateInputs(title, dest, start, end, notes)
+        if (validationError != null) {
+            toast(validationError)
+            return
+        }
+
+        val email = ownerEmail ?: return
+
+        lifecycleScope.launch {
+            if (!validateServerOrStop()) return@launch
+
+            if (editingTripId != null)
+                updateTrip(title, dest, start, end, notes, email)
+            else
+                createTrip(title, dest, start, end, notes, email)
+        }
+    }
+
+    // ---------------------------------------------------------
     private fun validateInputs(
         title: String,
         destination: String,
@@ -221,27 +176,151 @@ class AddTripActivity : AppCompatActivity() {
         endDate: String,
         notes: String
     ): String? {
+
         if (title.length < 3) return "Trip title must have at least 3 characters"
         if (destination.length < 3) return "Destination must have at least 3 characters"
-        if (notes.length > 300) return "Notes can't exceed 300 characters"
+        if (notes.length > 400) return "Notes cannot exceed 400 characters"
 
-        val start: Date
-        val end: Date
-        try {
-            start = dateFormat.parse(startDate) ?: return "Invalid start date format"
-            end = dateFormat.parse(endDate) ?: return "Invalid end date format"
-        } catch (e: Exception) {
-            return "Invalid date format (use dd.MM.yyyy)"
+        return try {
+            val start = dateFormat.parse(startDate)
+            val end = dateFormat.parse(endDate)
+            if (start == null || end == null) return "Invalid date format"
+            if (!start.before(end)) return "Start date must be before end date"
+            null
+        } catch (e: ParseException) {
+            "Date must be in dd.MM.yyyy format"
+        }
+    }
+
+    // ---------------------------------------------------------
+    private suspend fun createTrip(
+        title: String,
+        destination: String,
+        start: String,
+        end: String,
+        notes: String,
+        ownerEmail: String
+    ) {
+        val token = getAuthToken() ?: return toast("Session expired.")
+
+        val trip = Trip(
+            title = title,
+            destination = destination,
+            startDate = start,
+            endDate = end,
+            notes = notes,
+            ownerEmail = ownerEmail,
+            isSynced = false
+        )
+
+        if (isOnline()) applyWeather(trip)
+
+        // Insert locally first
+        val newId = repo.insertTrip(trip).toInt()
+        trip.id = newId
+
+        // Sync to server
+        if (isOnline()) {
+            val result = withContext(Dispatchers.IO) {
+                RemoteServerClient.syncTrips(token, listOf(trip))
+            }
+
+            if (result.isSuccess) {
+                trip.isSynced = true
+                repo.updateTrip(trip)
+            } else {
+                toast("⚠️ Saved locally. Sync failed.")
+            }
         }
 
-        if (start.after(end)) return "Start date must be before end date"
-        return null
+        withContext(Dispatchers.Main) {
+            toast("Trip added ✔️")
+            finish()
+        }
     }
 
-    private fun isOnline(): Boolean {
-        val connectivityManager = getSystemService(ConnectivityManager::class.java)
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    // ---------------------------------------------------------
+    private suspend fun updateTrip(
+        title: String,
+        destination: String,
+        start: String,
+        end: String,
+        notes: String,
+        ownerEmail: String
+    ) {
+        val token = getAuthToken() ?: return toast("Session expired.")
+
+        val trip = Trip(
+            id = editingTripId!!,
+            title = title,
+            destination = destination,
+            startDate = start,
+            endDate = end,
+            notes = notes,
+            ownerEmail = ownerEmail,
+            isSynced = false
+        )
+
+        if (isOnline()) applyWeather(trip)
+
+        repo.updateTrip(trip)
+
+        if (isOnline()) {
+            val result = withContext(Dispatchers.IO) {
+                RemoteServerClient.syncTrips(token, listOf(trip))
+            }
+
+            if (result.isSuccess) {
+                trip.isSynced = true
+                repo.updateTrip(trip)
+            } else {
+                toast("⚠️ Updated locally but sync failed.")
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            toast("Trip updated ✨")
+            finish()
+        }
     }
+
+    // ---------------------------------------------------------
+    private suspend fun applyWeather(trip: Trip) {
+        val w = withContext(Dispatchers.IO) {
+            WeatherService.getWeather(trip.destination)
+        }
+
+        if (w != null) {
+            trip.weatherTemp = w.first
+            trip.weatherDescription = w.second
+        }
+    }
+
+    // ---------------------------------------------------------
+    private fun showDatePicker(target: EditText) {
+        val c = Calendar.getInstance()
+        DatePickerDialog(
+            this,
+            { _, year, month, day ->
+                val sel = Calendar.getInstance()
+                sel.set(year, month, day)
+                target.setText(dateFormat.format(sel.time))
+            },
+            c.get(Calendar.YEAR),
+            c.get(Calendar.MONTH),
+            c.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    // ---------------------------------------------------------
+    private fun isOnline(): Boolean {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    // ---------------------------------------------------------
+    private fun toast(msg: String) =
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

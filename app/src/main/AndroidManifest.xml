@@ -47,8 +47,6 @@
         <!-- Ecran cu detalii despre un trip -->
         <activity android:name=".ui.activities.TripDetailsActivity" />
 
-        <activity android:name=".ui.activities.ManageUsersActivity" />
-
         <activity android:name=".ui.activities.AdminUsersActivity" />
 
         <activity android:name=".ui.activities.SettingsActivity" />

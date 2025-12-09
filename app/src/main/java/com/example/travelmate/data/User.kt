@@ -5,12 +5,18 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "users")
 data class User(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+
     val name: String,
     val email: String,
+
     val password: String,
-    val role: String = "user",
     val salt: String,
+
+    var role: String = "user",  // user / admin / superadmin
+
     var isBlocked: Boolean = false,
-    val useBiometrics: Boolean = true
+
+    var useBiometrics: Boolean = false
 )

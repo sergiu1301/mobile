@@ -12,6 +12,7 @@ import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.Trip
 import com.example.travelmate.data.TripDatabase
+import com.example.travelmate.network.RemoteServerClient
 import com.example.travelmate.network.WeatherService
 import com.example.travelmate.repository.TripRepository
 import kotlinx.coroutines.Dispatchers
@@ -23,29 +24,54 @@ class TripDetailsActivity : AppCompatActivity() {
     private var currentTrip: Trip? = null
     private lateinit var repo: TripRepository
 
+    private lateinit var tvTitle: TextView
+    private lateinit var tvDestination: TextView
+    private lateinit var tvDates: TextView
+    private lateinit var tvNotes: TextView
+    private lateinit var tvWeather: TextView
+    private lateinit var btnEditTrip: Button
+
+    private var loggedUserEmail: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_trip_details)
 
-        val tvTitle = findViewById<TextView>(R.id.tvTitle)
-        val tvDestination = findViewById<TextView>(R.id.tvDestination)
-        val tvDates = findViewById<TextView>(R.id.tvDates)
-        val tvNotes = findViewById<TextView>(R.id.tvNotes)
-        val tvWeather = findViewById<TextView>(R.id.tvWeather)
-        val btnEditTrip = findViewById<Button>(R.id.btnEditTrip)
+        initViews()
+        loadSecurePrefs()
 
         val tripId = intent.getIntExtra("trip_id", -1)
         if (tripId == -1) {
-            Toast.makeText(this, "Trip not found", Toast.LENGTH_SHORT).show()
+            toast("Trip not found")
             finish()
             return
         }
 
+        val db = TripDatabase.getDatabase(this)
+        repo = TripRepository(db.tripDao())
+
+        loadTrip(tripId)
+        setupEditButton()
+    }
+
+    private fun initViews() {
+        tvTitle = findViewById(R.id.tvTitle)
+        tvDestination = findViewById(R.id.tvDestination)
+        tvDates = findViewById(R.id.tvDates)
+        tvNotes = findViewById(R.id.tvNotes)
+        tvWeather = findViewById(R.id.tvWeather)
+        btnEditTrip = findViewById(R.id.btnEditTrip)
+    }
+
+    // ---------------------------------------------------------
+    // LOAD USER EMAIL (ownerEmail check)
+    // ---------------------------------------------------------
+    private fun loadSecurePrefs() {
         val masterKey = MasterKey.Builder(this)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        val securePrefs = EncryptedSharedPreferences.create(
+        val prefs = EncryptedSharedPreferences.create(
             this,
             "secure_user_prefs",
             masterKey,
@@ -53,61 +79,94 @@ class TripDetailsActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-        val loggedEmail = securePrefs.getString("email", null)
+        loggedUserEmail = prefs.getString("email", null)
 
-        val db = TripDatabase.getDatabase(this)
-        repo = TripRepository(db.tripDao())
+        if (loggedUserEmail == null) {
+            toast("Session expired, please login again")
+            finish()
+        }
+    }
 
+    // ---------------------------------------------------------
+    // SERVER CHECK
+    // ---------------------------------------------------------
+    private suspend fun requireServerOnline(): Boolean {
+        val result = withContext(Dispatchers.IO) { RemoteServerClient.ping() }
+
+        return if (result.isSuccess) {
+            true
+        } else {
+            tvWeather.text = "Server unavailable ❌"
+            toast("Server unavailable ❌")
+            false
+        }
+    }
+
+    // ---------------------------------------------------------
+    // LOAD TRIP + VERIFY OWNER
+    // ---------------------------------------------------------
+    private fun loadTrip(tripId: Int) {
         lifecycleScope.launch {
             val trip = withContext(Dispatchers.IO) { repo.getTripById(tripId) }
 
             if (trip == null) {
-                runOnUiThread {
-                    Toast.makeText(this@TripDetailsActivity, "Trip not found", Toast.LENGTH_SHORT).show()
-                    finish()
-                }
+                toast("Trip not found")
+                finish()
                 return@launch
             }
 
-            if (trip.ownerEmail != loggedEmail) {
-                runOnUiThread {
-                    Toast.makeText(this@TripDetailsActivity, "Access denied 🚫", Toast.LENGTH_LONG).show()
-                    finish()
-                }
+            // ❗ New correct check
+            if (trip.ownerEmail != loggedUserEmail) {
+                toast("Access denied 🚫")
+                finish()
                 return@launch
             }
 
             currentTrip = trip
+            bindTripToUI(trip)
+            loadWeather(trip)
+        }
+    }
 
-            runOnUiThread {
-                tvTitle.text = trip.title
-                tvDestination.text = "Destination: ${trip.destination}"
-                tvDates.text = "From ${trip.startDate} to ${trip.endDate}"
-                tvNotes.text = "Notes: ${trip.notes.ifEmpty { "No notes" }}"
-            }
+    private fun bindTripToUI(trip: Trip) {
+        tvTitle.text = trip.title
+        tvDestination.text = trip.destination
+        tvDates.text = "${trip.startDate} → ${trip.endDate}"
+        tvNotes.text = if (trip.notes.isBlank()) "No notes" else trip.notes
 
-            val weatherText = when {
-                trip.weatherTemp != null && trip.weatherDescription != null ->
-                    "${trip.weatherTemp}, ${trip.weatherDescription}"
+        tvWeather.text = when {
+            trip.weatherTemp != null -> "${trip.weatherTemp}, ${trip.weatherDescription}"
+            else -> "Loading weather..."
+        }
+    }
 
-                isOnline() -> {
-                    val weather = withContext(Dispatchers.IO) {
-                        WeatherService.getWeather(trip.destination)
-                    }
-                    if (weather != null) {
-                        repo.updateWeather(trip.id, weather.first, weather.second)
-                        "${weather.first}, ${weather.second}"
-                    } else "Weather data unavailable 🌥️"
-                }
-
-                else -> "Weather unavailable (offline)"
-            }
-
-            runOnUiThread {
-                tvWeather.text = weatherText
-            }
+    // ---------------------------------------------------------
+    // WEATHER FETCH
+    // ---------------------------------------------------------
+    private suspend fun loadWeather(trip: Trip) {
+        if (!isOnline()) {
+            tvWeather.text = "Weather unavailable (offline)"
+            return
         }
 
+        if (!requireServerOnline()) {
+            tvWeather.text = "Weather unavailable (server down)"
+            return
+        }
+
+        val weather = withContext(Dispatchers.IO) {
+            WeatherService.getWeather(trip.destination)
+        }
+
+        if (weather != null) {
+            repo.updateWeather(trip.id, weather.first, weather.second)
+            tvWeather.text = "${weather.first}, ${weather.second}"
+        } else {
+            tvWeather.text = "Weather data unavailable"
+        }
+    }
+
+    private fun setupEditButton() {
         btnEditTrip.setOnClickListener {
             currentTrip?.let { trip ->
                 val intent = Intent(this, AddTripActivity::class.java)
@@ -117,10 +176,14 @@ class TripDetailsActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------------------------------------------------
     private fun isOnline(): Boolean {
-        val connectivityManager = getSystemService(ConnectivityManager::class.java)
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
+
+    private fun toast(msg: String) =
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
