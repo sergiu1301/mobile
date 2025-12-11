@@ -18,5 +18,7 @@ data class User(
 
     var isBlocked: Boolean = false,
 
-    var useBiometrics: Boolean = false
+    var useBiometrics: Boolean = false,
+
+    var pendingSync: Boolean = false
 )

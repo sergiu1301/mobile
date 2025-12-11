@@ -1,45 +1,81 @@
 package com.example.travelmate.utils
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
+import android.net.*
+import kotlinx.coroutines.*
+import java.net.HttpURLConnection
+import java.net.URL
 
-class NetworkMonitor(private val context: Context, private val listener: (Boolean) -> Unit) {
+class NetworkMonitor(
+    private val context: Context,
+    private val onStatusChange: (Boolean) -> Unit
+) {
 
-    private val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private var isOnline = false
+    private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+    private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            listener(true) // online
+            verifyInternet()
         }
 
         override fun onLost(network: Network) {
-            listener(false) // offline
+            verifyInternet()
         }
     }
 
     fun start() {
-        val request = NetworkRequest.Builder()
+        val req = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
 
-        connectivityManager.registerNetworkCallback(request, networkCallback)
+        cm.registerNetworkCallback(req, callback)
+        verifyInternet()
     }
 
     fun stop() {
-        try {
-            connectivityManager.unregisterNetworkCallback(networkCallback)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        try { cm.unregisterNetworkCallback(callback) } catch (_: Exception) {}
+        scope.cancel()
+    }
+
+    private fun hasNetwork(): Boolean {
+        val active = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(active) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun verifyInternet() {
+        scope.launch {
+            if (!hasNetwork()) {
+                update(false)
+                return@launch
+            }
+
+            // 🔥 Verificare reală fără ping
+            val hasInternet = try {
+                val url = URL("https://clients3.google.com/generate_204")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 1500
+                conn.readTimeout = 1500
+                conn.requestMethod = "GET"
+                conn.connect()
+
+                conn.responseCode == 204
+            } catch (e: Exception) {
+                false
+            }
+
+            update(hasInternet)
         }
     }
 
-    fun isCurrentlyOnline(): Boolean {
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    private fun update(status: Boolean) {
+        if (status != isOnline) {
+            isOnline = status
+            onStatusChange(status)
+        }
     }
+
+    fun isCurrentlyOnline(): Boolean = isOnline
 }

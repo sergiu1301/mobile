@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -12,6 +13,7 @@ import androidx.security.crypto.MasterKey
 import com.example.travelmate.R
 import com.example.travelmate.data.TripDatabase
 import com.example.travelmate.network.RemoteServerClient
+import com.example.travelmate.network.ServerUserDTO
 import com.example.travelmate.repository.UserRepository
 import com.example.travelmate.utils.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
@@ -24,15 +26,15 @@ class AdminUsersActivity : AppCompatActivity() {
     private lateinit var usersContainer: LinearLayout
     private lateinit var progressBar: ProgressBar
     private lateinit var tvNoUsers: TextView
-
-    private lateinit var repo: UserRepository
     private lateinit var networkMonitor: NetworkMonitor
 
-    private var lastNetworkState: Boolean? = null
+    private lateinit var repo: UserRepository
+
+    private var token: String? = null
     private var currentUserRole: String = ""
     private var currentUserEmail: String = ""
 
-    private var serverOnline: Boolean = true   // 🔥 nou
+    private var isSyncRunning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,35 +48,13 @@ class AdminUsersActivity : AppCompatActivity() {
         val db = TripDatabase.getDatabase(this)
         repo = UserRepository(db.userDao())
 
-        val prefs = loadSecurePrefs()
-        currentUserRole = prefs.getString("role", "user") ?: "user"
-        currentUserEmail = prefs.getString("email", "") ?: ""
-
-        if (currentUserRole !in listOf("admin", "superadmin")) {
-            Toast.makeText(this, "Access denied ❌", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
-
+        loadPrefs()
         setupNetworkMonitor()
-
-        // 🔥 verificare server înainte de orice
-        lifecycleScope.launch {
-            if (!checkServer()) {
-                Toast.makeText(
-                    this@AdminUsersActivity,
-                    "Server unavailable. Try again later ❌",
-                    Toast.LENGTH_LONG
-                ).show()
-                progressBar.isVisible = false
-                return@launch
-            }
-            loadUsers()
-        }
+        loadUsers()
     }
 
-    private fun loadSecurePrefs() =
-        EncryptedSharedPreferences.create(
+    private fun loadPrefs() {
+        val prefs = EncryptedSharedPreferences.create(
             this,
             "secure_user_prefs",
             MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
@@ -82,144 +62,162 @@ class AdminUsersActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
+        token = prefs.getString("auth_token", null)
+        currentUserRole = prefs.getString("role", "user") ?: "user"
+        currentUserEmail = prefs.getString("email", "") ?: ""
+    }
+
     private fun setupNetworkMonitor() {
         networkMonitor = NetworkMonitor(this) { isOnline ->
             runOnUiThread {
-                updateNetworkStatus(isOnline)
-                lastNetworkState = isOnline
+                tvNetworkStatus.text = if (isOnline) "Online" else "Offline Mode"
+                tvNetworkStatus.setTextColor(
+                    Color.parseColor(if (isOnline) "#2E7D32" else "#E65100")
+                )
+            }
+
+            if (isOnline) {
+                lifecycleScope.launch { performSafeSync() }
             }
         }
 
-        lastNetworkState = networkMonitor.isCurrentlyOnline()
-        updateNetworkStatus(lastNetworkState == true)
         networkMonitor.start()
     }
 
-    private fun updateNetworkStatus(isOnline: Boolean) {
-        tvNetworkStatus.text =
-            if (isOnline && serverOnline) "Online"
-            else "Offline (server unreachable)"
+    private suspend fun performSafeSync() {
+        if (isSyncRunning) return
+        isSyncRunning = true
 
-        tvNetworkStatus.setTextColor(
-            Color.parseColor(
-                if (isOnline && serverOnline)
-                    "#2E7D32"
-                else
-                    "#E65100"
-            )
-        )
-    }
-
-    // ============================================================
-    // CHECK SERVER
-    // ============================================================
-    private suspend fun checkServer(): Boolean {
-        val result = withContext(Dispatchers.IO) {
-            RemoteServerClient.ping()
-        }
-
-        serverOnline = result.isSuccess
-        updateNetworkStatus(lastNetworkState == true)
-
-        return serverOnline
-    }
-
-    // ============================================================
-    // LOAD USERS — se execută doar dacă serverul merge
-    // ============================================================
-    private fun loadUsers() {
-        if (!serverOnline) {
-            Toast.makeText(this, "Server is offline, cannot load users ❌", Toast.LENGTH_LONG).show()
+        try {
+            progressBar.isVisible = true
+            syncPendingUsers()
+            loadUsers()
+        } finally {
+            isSyncRunning = false
             progressBar.isVisible = false
-            return
         }
+    }
 
-        progressBar.isVisible = true
-        usersContainer.removeAllViews()
-        tvNoUsers.isVisible = false
+    private suspend fun syncPendingUsers() {
+        val tk = token ?: return
+        val pending = repo.getPendingUsers()
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val users = repo.getAllUsers()
+        if (pending.isEmpty()) return
 
-            withContext(Dispatchers.Main) {
-                progressBar.isVisible = false
-
-                if (users.isEmpty()) {
-                    tvNoUsers.isVisible = true
-                    return@withContext
-                }
-
-                val inflater = LayoutInflater.from(this@AdminUsersActivity)
-
-                users.forEach { user ->
-                    val card = inflater.inflate(R.layout.item_user_card, usersContainer, false)
-
-                    val tvEmail = card.findViewById<TextView>(R.id.tvUserEmail)
-                    val tvRole = card.findViewById<TextView>(R.id.tvUserRole)
-                    val switchRole = card.findViewById<Switch>(R.id.switchRole)
-                    val switchBlock = card.findViewById<Switch>(R.id.switchBlock)
-
-                    tvEmail.text = user.email
-                    tvRole.text = "Role: ${user.role}"
-
-                    // --------------------
-                    // ROLE SWITCH
-                    // --------------------
-                    switchRole.isChecked = user.role == "admin"
-                    switchRole.isEnabled = currentUserRole == "superadmin"
-
-                    switchRole.setOnCheckedChangeListener { _, isChecked ->
-
-                        if (!serverOnline) {
-                            switchRole.isChecked = user.role == "admin"
-                            Toast.makeText(this@AdminUsersActivity, "Server offline ❌", Toast.LENGTH_SHORT).show()
-                            return@setOnCheckedChangeListener
-                        }
-
-                        if (currentUserRole != "superadmin") {
-                            switchRole.isChecked = user.role == "admin"
-                            Toast.makeText(this@AdminUsersActivity, "Only superadmin can change roles", Toast.LENGTH_SHORT).show()
-                            return@setOnCheckedChangeListener
-                        }
-
-                        val newRole = if (isChecked) "admin" else "user"
-                        user.role = newRole
-                        tvRole.text = "Role: $newRole"
-
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            repo.updateUserRole(user.email, newRole)
-                        }
-                    }
-
-                    // --------------------
-                    // BLOCK SWITCH
-                    // --------------------
-                    switchBlock.isChecked = user.isBlocked
-
-                    switchBlock.setOnCheckedChangeListener { _, isBlocked ->
-                        if (!serverOnline) {
-                            switchBlock.isChecked = user.isBlocked
-                            Toast.makeText(this@AdminUsersActivity, "Server offline ❌", Toast.LENGTH_SHORT).show()
-                            return@setOnCheckedChangeListener
-                        }
-
-                        user.isBlocked = isBlocked
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            repo.updateUserBlockStatus(user.email, isBlocked)
-                        }
-                    }
-
-                    usersContainer.addView(card)
-                }
+        withContext(Dispatchers.IO) {
+            for (u in pending) {
+                RemoteServerClient.updateUserRole(tk, u.email, u.role)
+                RemoteServerClient.updateBlockStatus(tk, u.email, u.isBlocked)
+                repo.clearPending(u.email)
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        lifecycleScope.launch {
-            if (checkServer())
-                loadUsers()
+    private fun loadUsers() {
+        val tk = token ?: return
+
+        progressBar.isVisible = true
+        usersContainer.removeAllViews()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+
+            val online = networkMonitor.isCurrentlyOnline()
+            val response = if (online) RemoteServerClient.getUsers(tk) else null
+
+            val users = if (response != null && response.isSuccess) {
+                val serverList = response.getOrNull() ?: emptyList()
+                syncLocalWithServer(serverList)
+                serverList
+            } else {
+                repo.getAllUsers().map { ServerUserDTO(it.email, it.role, it.isBlocked) }
+            }
+
+            withContext(Dispatchers.Main) {
+                progressBar.isVisible = false
+                renderUsers(users)
+            }
+        }
+    }
+
+    private suspend fun syncLocalWithServer(serverUsers: List<ServerUserDTO>) {
+        withContext(Dispatchers.IO) {
+            for (srv in serverUsers) {
+                repo.updateUserRole(srv.email, srv.role)
+                repo.updateUserBlockStatus(srv.email, srv.isBlocked)
+                repo.clearPending(srv.email)
+            }
+        }
+    }
+
+    private fun renderUsers(allUsers: List<ServerUserDTO>) {
+
+        val filtered = when (currentUserRole) {
+            "superadmin" -> allUsers.filter { it.email != currentUserEmail }
+            "admin" -> allUsers.filter { it.role == "user" }
+            else -> emptyList()
+        }
+
+        usersContainer.removeAllViews()
+        tvNoUsers.isVisible = filtered.isEmpty()
+
+        val inflater = LayoutInflater.from(this)
+
+        filtered.forEach { dto ->
+
+            val card = inflater.inflate(R.layout.item_user_card, usersContainer, false)
+
+            val tvEmail = card.findViewById<TextView>(R.id.tvUserEmail)
+            val tvRole = card.findViewById<TextView>(R.id.tvUserRole)
+            val switchRole = card.findViewById<SwitchCompat>(R.id.switchRole)
+            val switchBlock = card.findViewById<SwitchCompat>(R.id.switchBlock)
+
+            tvEmail.text = dto.email
+            tvRole.text = "Role: ${dto.role}"
+
+            switchRole.isChecked = dto.role == "admin"
+            switchRole.isEnabled = currentUserRole == "superadmin"
+
+            switchRole.setOnCheckedChangeListener { _, checked ->
+                if (currentUserRole != "superadmin") {
+                    switchRole.isChecked = dto.role == "admin"
+                    Toast.makeText(this, "Only superadmin can change roles", Toast.LENGTH_SHORT).show()
+                    return@setOnCheckedChangeListener
+                }
+
+                val newRole = if (checked) "admin" else "user"
+                dto.role = newRole
+                tvRole.text = "Role: $newRole"
+
+                lifecycleScope.launch(Dispatchers.IO) {
+                    if (networkMonitor.isCurrentlyOnline()) {
+                        RemoteServerClient.updateUserRole(token!!, dto.email, newRole)
+                        repo.updateUserRole(dto.email, newRole)
+                        repo.clearPending(dto.email)
+                    } else {
+                        repo.updateUserRole(dto.email, newRole)
+                        repo.markPending(dto.email)
+                    }
+                }
+            }
+
+            switchBlock.isChecked = dto.isBlocked
+
+            switchBlock.setOnCheckedChangeListener { _, blocked ->
+                dto.isBlocked = blocked
+
+                lifecycleScope.launch(Dispatchers.IO) {
+                    if (networkMonitor.isCurrentlyOnline()) {
+                        RemoteServerClient.updateBlockStatus(token!!, dto.email, blocked)
+                        repo.updateUserBlockStatus(dto.email, blocked)
+                        repo.clearPending(dto.email)
+                    } else {
+                        repo.updateUserBlockStatus(dto.email, blocked)
+                        repo.markPending(dto.email)
+                    }
+                }
+            }
+
+            usersContainer.addView(card)
         }
     }
 

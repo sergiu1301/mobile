@@ -70,8 +70,8 @@ class DashboardActivity : AppCompatActivity() {
                 }
             }
 
-            // ⭐ ADMIN MODE ---------------------------------------------------------
-            "admin" -> {
+            // ⭐ ADMIN + SUPERADMIN -------------------------------------------------
+            "admin", "superadmin" -> {
                 cardUsers.visibility = View.VISIBLE
 
                 cardUsers.setOnClickListener {

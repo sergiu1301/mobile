@@ -43,9 +43,9 @@ class SettingsActivity : AppCompatActivity() {
         val email = securePrefs.getString("email", null)
         val isGuest = securePrefs.getBoolean("guest_active", false)
 
-        if (isGuest) {
-            cardBiometrics.alpha = 0.4f
-            switchBiometrics.isEnabled = false
+        // 🔥 Guest NU trebuie să aibă biometrics
+        if (isGuest || email == "guest@local") {
+            disableBiometricsForGuest()
         } else if (email != null) {
             loadBiometricState(email)
         }
@@ -109,7 +109,21 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // --------------------------------------------------------
-    // BIOMETRICS TOGGLE — now with SERVER CHECK
+    // 🔥 Disable biometrics completely for guest users
+    // --------------------------------------------------------
+    private fun disableBiometricsForGuest() {
+        switchBiometrics.isEnabled = false
+        cardBiometrics.alpha = 0.35f
+
+        // Șterge orice urma de fingerprint pentru guest
+        securePrefs.edit()
+            .remove("last_biometric_user")
+            .remove("fingerprint_enabled_guest@local")
+            .apply()
+    }
+
+    // --------------------------------------------------------
+    // BIOMETRICS TOGGLE
     // --------------------------------------------------------
     private fun loadBiometricState(email: String) {
         lifecycleScope.launch {
@@ -124,6 +138,10 @@ class SettingsActivity : AppCompatActivity() {
                         withContext(Dispatchers.IO) {
                             userRepository.updateUseBiometrics(email, enabled)
                         }
+
+                        securePrefs.edit()
+                            .putBoolean("fingerprint_enabled_$email", enabled)
+                            .apply()
 
                         val msg =
                             if (enabled) "Biometric login enabled" else "Biometric login disabled"
@@ -142,7 +160,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // --------------------------------------------------------
-    // LOGOUT — now also checks server before logging out
+    // LOGOUT
     // --------------------------------------------------------
     private fun setupLogout(isGuest: Boolean) {
 
@@ -151,8 +169,10 @@ class SettingsActivity : AppCompatActivity() {
 
                 requireServerOnline {
 
+                    // 🔥 Guest logout behaves differently
                     if (isGuest) {
                         securePrefs.edit().clear().apply()
+
                         Snackbar.make(cardLogout, "Guest session ended 👋", Snackbar.LENGTH_SHORT)
                             .setBackgroundTint(
                                 ContextCompat.getColor(
@@ -166,6 +186,7 @@ class SettingsActivity : AppCompatActivity() {
                         return@requireServerOnline
                     }
 
+                    // Normal logout
                     val email = securePrefs.getString("email", null)
 
                     if (email != null) {
@@ -173,10 +194,11 @@ class SettingsActivity : AppCompatActivity() {
                             userRepository.getUserByEmail(email)
                         }
 
+                        // limpi fingerprint if disabled
                         if (user?.useBiometrics == false) {
                             securePrefs.edit().apply {
-                                remove("biometric_enabled")
-                                remove("fingerprint_email_active")
+                                remove("fingerprint_enabled_$email")
+                                remove("last_biometric_user")
                             }.apply()
                         }
                     }

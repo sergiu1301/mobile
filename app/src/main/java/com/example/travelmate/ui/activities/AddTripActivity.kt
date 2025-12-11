@@ -38,7 +38,6 @@ class AddTripActivity : AppCompatActivity() {
 
     private var ownerEmail: String? = null
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_add_trip)
@@ -74,8 +73,6 @@ class AddTripActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------------
-    // LOAD USER EMAIL (no more ownerId!)
-    // ---------------------------------------------------------
     private fun loadOwnerEmail() {
         val prefs = EncryptedSharedPreferences.create(
             this,
@@ -91,24 +88,6 @@ class AddTripActivity : AppCompatActivity() {
             toast("Session expired. Please login again.")
             finish()
         }
-    }
-
-    // ---------------------------------------------------------
-    // SERVER VALIDATION
-    // ---------------------------------------------------------
-    private suspend fun isServerAvailable(): Boolean {
-        val result = withContext(Dispatchers.IO) { RemoteServerClient.ping() }
-        return result.isSuccess
-    }
-
-    private suspend fun validateServerOrStop(): Boolean {
-        val ok = isServerAvailable()
-        if (!ok) {
-            withContext(Dispatchers.Main) {
-                toast("❌ Server unavailable — operation canceled")
-            }
-        }
-        return ok
     }
 
     private fun getAuthToken(): String? {
@@ -159,8 +138,6 @@ class AddTripActivity : AppCompatActivity() {
         val email = ownerEmail ?: return
 
         lifecycleScope.launch {
-            if (!validateServerOrStop()) return@launch
-
             if (editingTripId != null)
                 updateTrip(title, dest, start, end, notes, email)
             else
@@ -201,7 +178,9 @@ class AddTripActivity : AppCompatActivity() {
         notes: String,
         ownerEmail: String
     ) {
-        val token = getAuthToken() ?: return toast("Session expired.")
+        val isGuest = ownerEmail == "guest@local"
+        val token = getAuthToken()
+        val online = isOnline()
 
         val trip = Trip(
             title = title,
@@ -213,24 +192,39 @@ class AddTripActivity : AppCompatActivity() {
             isSynced = false
         )
 
-        if (isOnline()) applyWeather(trip)
+        // ------------ GUEST MODE → DOAR LOCAL ------------
+        if (isGuest) {
+            val newId = repo.insertTrip(trip).toInt()
+            trip.id = newId
 
-        // Insert locally first
+            withContext(Dispatchers.Main) {
+                toast("Trip saved locally ✔️ (guest mode)")
+                finish()
+            }
+            return
+        }
+
+        // ------------ USER NORMAL ------------
+        if (online) applyWeather(trip)
+
         val newId = repo.insertTrip(trip).toInt()
         trip.id = newId
 
-        // Sync to server
-        if (isOnline()) {
-            val result = withContext(Dispatchers.IO) {
-                RemoteServerClient.syncTrips(token, listOf(trip))
+        if (!online || token == null) {
+            withContext(Dispatchers.Main) {
+                toast("Trip saved offline ✔️ Will sync later")
+                finish()
             }
+            return
+        }
 
-            if (result.isSuccess) {
-                trip.isSynced = true
-                repo.updateTrip(trip)
-            } else {
-                toast("⚠️ Saved locally. Sync failed.")
-            }
+        val syncResult = withContext(Dispatchers.IO) {
+            RemoteServerClient.syncTrips(token, listOf(trip))
+        }
+
+        if (syncResult.isSuccess) {
+            trip.isSynced = true
+            repo.updateTrip(trip)
         }
 
         withContext(Dispatchers.Main) {
@@ -238,6 +232,7 @@ class AddTripActivity : AppCompatActivity() {
             finish()
         }
     }
+
 
     // ---------------------------------------------------------
     private suspend fun updateTrip(
@@ -248,7 +243,9 @@ class AddTripActivity : AppCompatActivity() {
         notes: String,
         ownerEmail: String
     ) {
-        val token = getAuthToken() ?: return toast("Session expired.")
+        val isGuest = ownerEmail == "guest@local"
+        val token = getAuthToken()
+        val online = isOnline()
 
         val trip = Trip(
             id = editingTripId!!,
@@ -261,20 +258,30 @@ class AddTripActivity : AppCompatActivity() {
             isSynced = false
         )
 
-        if (isOnline()) applyWeather(trip)
+        // ------------ GUEST MODE → DOAR LOCAL ------------
+        if (isGuest) {
+            repo.updateTrip(trip)
+
+            withContext(Dispatchers.Main) {
+                toast("Trip updated locally ✨ (guest mode)")
+                finish()
+            }
+            return
+        }
+
+        // ------------ USER NORMAL ------------
+        if (online) applyWeather(trip)
 
         repo.updateTrip(trip)
 
-        if (isOnline()) {
-            val result = withContext(Dispatchers.IO) {
+        if (online && token != null) {
+            val syncResult = withContext(Dispatchers.IO) {
                 RemoteServerClient.syncTrips(token, listOf(trip))
             }
 
-            if (result.isSuccess) {
+            if (syncResult.isSuccess) {
                 trip.isSynced = true
                 repo.updateTrip(trip)
-            } else {
-                toast("⚠️ Updated locally but sync failed.")
             }
         }
 
@@ -283,6 +290,7 @@ class AddTripActivity : AppCompatActivity() {
             finish()
         }
     }
+
 
     // ---------------------------------------------------------
     private suspend fun applyWeather(trip: Trip) {

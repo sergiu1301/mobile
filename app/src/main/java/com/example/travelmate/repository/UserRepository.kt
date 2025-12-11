@@ -106,4 +106,21 @@ class UserRepository(private val dao: UserDao) {
         val computed = Base64.encodeToString(inputHashBytes, Base64.NO_WRAP)
         return computed == storedHash
     }
+
+    suspend fun markPending(email: String) {
+        val user = dao.getUserByEmail(email) ?: return
+        user.pendingSync = true
+        dao.insertUser(user) // REPLACE update
+    }
+
+    suspend fun clearPending(email: String) {
+        val user = dao.getUserByEmail(email) ?: return
+        user.pendingSync = false
+        dao.insertUser(user)
+    }
+
+    suspend fun getPendingUsers(): List<User> {
+        return dao.getAllUsers().filter { it.pendingSync }
+    }
+
 }

@@ -14,7 +14,7 @@ data class Trip(
     var endDate: String,
     var notes: String,
 
-    var ownerEmail: String,
+    var  ownerEmail: String,
 
     var weatherTemp: String? = null,
     var weatherDescription: String? = null,

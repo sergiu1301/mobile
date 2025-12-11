@@ -1,7 +1,6 @@
 package com.example.travelmate.ui.activities
 
 import android.content.Intent
-import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -14,11 +13,10 @@ import com.example.travelmate.R
 import com.example.travelmate.data.Trip
 import com.example.travelmate.data.TripDatabase
 import com.example.travelmate.network.RemoteServerClient
+import com.example.travelmate.network.WeatherService
 import com.example.travelmate.repository.TripRepository
 import com.example.travelmate.utils.NetworkMonitor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 
 class TripListActivity : AppCompatActivity() {
 
@@ -31,21 +29,31 @@ class TripListActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var btnAddTrip: View
 
-    private lateinit var securePrefs: SharedPreferences
+    private lateinit var prefs: EncryptedSharedPreferences
 
-    private var currentEmail: String = ""
-    private var isOnline = false
+    private var email = ""
+    private var token: String? = null
+    private var lastOnline = false
+    private var syncRunning = false
+
+    // Guest FLAG
+    private val isGuest: Boolean
+        get() = email == "guest@local"
+
+    // ============================================================
+    // LIFECYCLE
+    // ============================================================
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_trip_list)
 
         bindViews()
-        repo = TripRepository(TripDatabase.getDatabase(this).tripDao())
-        securePrefs = loadPrefs()
+        setupPrefs()
 
-        currentEmail = securePrefs.getString("email", "") ?: ""
-        if (currentEmail.isBlank()) {
+        repo = TripRepository(TripDatabase.getDatabase(this).tripDao())
+
+        if (email.isBlank()) {
             Toast.makeText(this, "Session expired", Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
@@ -57,94 +65,209 @@ class TripListActivity : AppCompatActivity() {
         }
 
         setupNetworkMonitor()
-        loadInitialData()
+        loadLocalTrips() // show local immediately
     }
 
-    // -------------------------------------------------------
+    override fun onResume() {
+        super.onResume()
+        loadLocalTrips()
+    }
+
+    override fun onDestroy() {
+        try { monitor.stop() } catch (_: Exception) {}
+        super.onDestroy()
+    }
+
+    // ============================================================
+    // SETUP
+    // ============================================================
+
     private fun bindViews() {
         tvNetworkStatus = findViewById(R.id.tvNetworkStatus)
         tvNoTrips = findViewById(R.id.tvNoTrips)
         tripsContainer = findViewById(R.id.tripsContainer)
         progress = findViewById(R.id.progressBar)
         btnAddTrip = findViewById(R.id.btnAddTrip)
+        progress.visibility = View.GONE
     }
 
-    private fun loadPrefs() =
-        EncryptedSharedPreferences.create(
+    private fun setupPrefs() {
+        val masterKey = MasterKey.Builder(this)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        prefs = EncryptedSharedPreferences.create(
             this,
             "secure_user_prefs",
-            MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        ) as EncryptedSharedPreferences
 
-    // -------------------------------------------------------
+        email = prefs.getString("email", "") ?: ""
+        token = prefs.getString("auth_token", null)
+    }
+
+    // ============================================================
+    // NETWORK MONITOR with GUEST WEATHER LOGIC
+    // ============================================================
+
     private fun setupNetworkMonitor() {
         monitor = NetworkMonitor(this) { online ->
             runOnUiThread {
-                isOnline = online
-                tvNetworkStatus.text = if (online) "Online" else "Offline mode"
-                tvNetworkStatus.setTextColor(
-                    Color.parseColor(if (online) "#2E7D32" else "#E65100")
-                )
+                updateNetworkStatus(online)
+
+                val becameOnline = (!lastOnline && online)
+                lastOnline = online
+
+                if (becameOnline) {
+                    lifecycleScope.launch {
+                        if (isGuest) {
+                            // GUEST → ONLY UPDATE WEATHER
+                            fixMissingWeatherBeforeSync()
+                            loadLocalTrips()
+                        } else {
+                            // NORMAL USER → FULL SYNC
+                            doSafeSync()
+                        }
+                    }
+                }
             }
         }
 
-        isOnline = monitor.isCurrentlyOnline()
+        lastOnline = monitor.isCurrentlyOnline()
+        updateNetworkStatus(lastOnline)
         monitor.start()
     }
 
-    // -------------------------------------------------------
-    // FIRST LOAD: cache → server
-    // -------------------------------------------------------
-    private fun loadInitialData() {
-        lifecycleScope.launch {
-            val cached = withContext(Dispatchers.IO) { repo.getTripsForUser(currentEmail) }
-            showTrips(cached)
+    private fun updateNetworkStatus(online: Boolean) {
+        tvNetworkStatus.text = if (online) "Online" else "Offline Mode"
+        tvNetworkStatus.setTextColor(
+            Color.parseColor(if (online) "#2E7D32" else "#E65100")
+        )
+    }
 
-            if (isOnline) fetchFromServer()
+    // ============================================================
+    // SYNC OR CHESTIONS
+    // ============================================================
+
+    private suspend fun doSafeSync() {
+        if (syncRunning) return
+        syncRunning = true
+
+        try {
+            progress.visibility = View.VISIBLE
+
+            fullSyncWithServer()
+            loadLocalTrips()
+            showCustomToast("Synced successfully ✔", Color.parseColor("#4CAF50"))
+
+        } finally {
+            progress.visibility = View.GONE
+            syncRunning = false
         }
     }
 
-    // -------------------------------------------------------
-    private suspend fun fetchFromServer() {
-        progress.visibility = View.VISIBLE
+    // ============================================================
+    // LOAD LOCAL TRIPS
+    // ============================================================
 
-        val token = securePrefs.getString("auth_token", null) ?: return
+    private fun loadLocalTrips() {
+        lifecycleScope.launch {
+            // GUEST + ONLINE → aplică weather înainte de afișare
+            if (isGuest && monitor.isCurrentlyOnline()) {
+                fixMissingWeatherBeforeSync()
+            }
 
-        val serverTrips = withContext(Dispatchers.IO) {
-            val result = RemoteServerClient.getTrips(token)
-            if (result.isSuccess) result.getOrNull() else null
+            val trips = withContext(Dispatchers.IO) {
+                repo.getTripsForUser(email)
+            }
+
+            showTrips(trips)
         }
+    }
 
-        progress.visibility = View.GONE
+    // ============================================================
+    // FULL SYNC (server <-> local)
+    // ============================================================
 
-        if (serverTrips == null) {
-            Toast.makeText(this, "Failed loading from server", Toast.LENGTH_SHORT).show()
+    private suspend fun fullSyncWithServer() {
+        if (isGuest) {
+            // Guest → only update weather locally
+            fixMissingWeatherBeforeSync()
             return
         }
+
+        val token = token ?: return
+
+        fixMissingWeatherBeforeSync()
+
+        val localTrips = withContext(Dispatchers.IO) {
+            repo.getTripsForUser(email)
+        }
+
+        val syncResult = RemoteServerClient.syncTrips(token, localTrips)
+        if (!syncResult.isSuccess) return
+
+        val serverTrips = RemoteServerClient.getTrips(token).getOrNull() ?: return
 
         withContext(Dispatchers.IO) {
-            repo.replaceAllForUser(currentEmail, serverTrips)
+            serverTrips.forEach { it.isSynced = true }
+            repo.replaceAllForUser(email, serverTrips)
         }
-
-        showTrips(serverTrips)
     }
 
-    // -------------------------------------------------------
+    // ============================================================
+    // WEATHER UPDATE LOCAL
+    // ============================================================
+
+    private suspend fun fixMissingWeatherBeforeSync() {
+        val trips = withContext(Dispatchers.IO) { repo.getTripsForUser(email) }
+        val missing = trips.filter { it.weatherTemp == null }
+
+        if (missing.isEmpty()) return
+
+        for (trip in missing) {
+            val weather = WeatherService.getWeather(trip.destination)
+            if (weather != null) {
+                trip.weatherTemp = weather.first
+                trip.weatherDescription = weather.second
+                trip.isSynced = false
+
+                withContext(Dispatchers.IO) { repo.updateTrip(trip) }
+            }
+        }
+    }
+
+
+    // ============================================================
+    // DELETE
+    // ============================================================
+
+    private fun deleteTrip(trip: Trip) {
+        lifecycleScope.launch(Dispatchers.IO) {
+
+            repo.deleteTrip(trip)
+
+            if (!isGuest && monitor.isCurrentlyOnline() && token != null) {
+                fullSyncWithServer()
+            }
+
+            withContext(Dispatchers.Main) { loadLocalTrips() }
+        }
+    }
+
+    // ============================================================
+    // UI
+    // ============================================================
+
     private fun showTrips(trips: List<Trip>) {
         tripsContainer.removeAllViews()
-
-        if (trips.isEmpty()) {
-            tvNoTrips.visibility = View.VISIBLE
-            return
-        }
-
-        tvNoTrips.visibility = View.GONE
+        tvNoTrips.visibility = if (trips.isEmpty()) View.VISIBLE else View.GONE
 
         val inflater = layoutInflater
 
-        trips.forEach { trip ->
+        for (trip in trips) {
             val card = inflater.inflate(R.layout.item_trip, tripsContainer, false)
 
             card.findViewById<TextView>(R.id.tvTripTitle).text = trip.title
@@ -152,56 +275,48 @@ class TripListActivity : AppCompatActivity() {
             card.findViewById<TextView>(R.id.tvTripDates).text =
                 "${trip.startDate} → ${trip.endDate}"
 
-            val deleteBtn = card.findViewById<View>(R.id.btnDeleteTrip)
-            deleteBtn.setOnClickListener { deleteTrip(trip) }
+            val tvWeather = card.findViewById<TextView>(R.id.tvTripWeather)
+            val ivWeather = card.findViewById<ImageView>(R.id.ivWeatherIcon)
+
+            if (trip.weatherTemp != null) {
+                tvWeather.text = trip.weatherTemp
+                ivWeather.setImageResource(getWeatherIcon(trip.weatherDescription))
+            } else {
+                tvWeather.text = "No data"
+                ivWeather.setImageResource(R.drawable.ic_weather_unknown)
+            }
+
+            card.findViewById<ImageButton>(R.id.btnDeleteTrip).setOnClickListener {
+                deleteTrip(trip)
+            }
 
             card.setOnClickListener {
-                val intent = Intent(this, AddTripActivity::class.java)
-                intent.putExtra("edit_trip_id", trip.id)
-                startActivity(intent)
+                startActivity(Intent(this, AddTripActivity::class.java).apply {
+                    putExtra("edit_trip_id", trip.id)
+                })
             }
 
             tripsContainer.addView(card)
         }
     }
 
-    // -------------------------------------------------------
-    private fun deleteTrip(trip: Trip) {
-        lifecycleScope.launch {
-            withContext(Dispatchers.IO) { repo.deleteTrip(trip) }
-
-            val cached = withContext(Dispatchers.IO) { repo.getTripsForUser(currentEmail) }
-            showTrips(cached)
-
-            if (isOnline) syncTrips()
-        }
+    private fun showCustomToast(message: String, bgColor: Int) {
+        val toast = Toast.makeText(this, message, Toast.LENGTH_SHORT)
+        val view = toast.view
+        view?.setBackgroundColor(bgColor)
+        val padding = (16 * resources.displayMetrics.density).toInt()
+        view?.setPadding(padding, padding, padding, padding)
+        toast.show()
     }
 
-    // -------------------------------------------------------
-    private suspend fun syncTrips() {
-        val token = securePrefs.getString("auth_token", null) ?: return
-
-        val localTrips = withContext(Dispatchers.IO) {
-            repo.getTripsForUser(currentEmail)
+    private fun getWeatherIcon(desc: String?): Int {
+        if (desc == null) return R.drawable.ic_weather_unknown
+        return when {
+            desc.contains("sun", true) -> R.drawable.ic_weather_sun
+            desc.contains("clear", true) -> R.drawable.ic_weather_sun
+            desc.contains("cloud", true) -> R.drawable.ic_weather_cloud
+            desc.contains("rain", true) -> R.drawable.ic_weather_rain
+            else -> R.drawable.ic_weather_unknown
         }
-
-        val result = withContext(Dispatchers.IO) {
-            RemoteServerClient.syncTrips(token, localTrips)
-        }
-
-        if (result.isSuccess) {
-            Toast.makeText(this, "Synced ☁️", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        loadInitialData()
-    }
-
-    override fun onDestroy() {
-        try { monitor.stop() } catch (_: Exception) {}
-        super.onDestroy()
     }
 }
-

@@ -7,15 +7,21 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, EmailStr
+
+# =====================================================
+# CONFIG
+# =====================================================
 
 DATABASE = Path(__file__).parent / "travelmate.db"
 SECRET_KEY = os.environ.get("TRAVELMATE_SECRET", "change-me")
 TOKEN_TTL_SECONDS = 60 * 60 * 24
 
+app = FastAPI(title="TravelMate API", version="5.0.0")
+
 # =====================================================
-# MODELE — actualizate cu ownerEmail (NU ownerId!)
+# MODELS
 # =====================================================
 
 class RegisterRequest(BaseModel):
@@ -29,36 +35,42 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleLoginRequest(BaseModel):
+    email: EmailStr
+    name: str
+
+
+# TOTUL OPTIONAL → niciodată 422
 class TripPayload(BaseModel):
-    id: int
-    title: str
-    destination: str
-    startDate: str
-    endDate: str
-    notes: str
-    ownerEmail: EmailStr                     # 🔥 IMPORTANT
+    id: Optional[int] = 0
+    title: Optional[str] = ""
+    destination: Optional[str] = ""
+    startDate: Optional[str] = ""
+    endDate: Optional[str] = ""
+    notes: Optional[str] = ""
     weatherTemp: Optional[str] = None
     weatherDescription: Optional[str] = None
 
 
 class TripSyncRequest(BaseModel):
-    trips: List[TripPayload]
-
-
-app = FastAPI(title="TravelMate Companion API", version="3.0.0")
-
+    trips: List[TripPayload] = []
 
 # =====================================================
-# DB
+# DB UTILS
 # =====================================================
 
 def get_db():
     DATABASE.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect(
+        DATABASE,
+        check_same_thread=False  # ← FIX IMPORTANT!!
+    )
     conn.row_factory = sqlite3.Row
-    yield conn
-    conn.commit()
-    conn.close()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def init_db():
@@ -67,8 +79,7 @@ def init_db():
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT UNIQUE NOT NULL,
+                email TEXT PRIMARY KEY,
                 password TEXT NOT NULL,
                 salt TEXT NOT NULL,
                 name TEXT NOT NULL,
@@ -85,58 +96,67 @@ def init_db():
                 startDate TEXT NOT NULL,
                 endDate TEXT NOT NULL,
                 notes TEXT NOT NULL,
-                ownerId INTEGER NOT NULL,
+                ownerEmail TEXT NOT NULL,
                 weatherTemp TEXT,
                 weatherDescription TEXT,
-                FOREIGN KEY(ownerId) REFERENCES users(id)
+                FOREIGN KEY(ownerEmail) REFERENCES users(email)
             );
         """)
 
 
+@app.on_event("startup")
+def startup():
+    init_db()
+
 # =====================================================
-# TOKEN + SECURITY
+# AUTH HELPERS
 # =====================================================
 
 def hash_password(password: str, salt: Optional[str] = None):
     salt = salt or os.urandom(16).hex()
-    digest = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
-    return digest, salt
+    hashed = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return hashed, salt
 
 
 def create_token(email: str):
     issued = int(time.time())
     payload = f"{email}:{issued}"
-    signature = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return base64.urlsafe_b64encode(f"{payload}:{signature}".encode()).decode()
+    sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
 
 
 def validate_token(token: str):
     try:
         raw = base64.urlsafe_b64decode(token).decode()
-        email, issued, signature = raw.split(":")
-        expected = hmac.new(SECRET_KEY.encode(), f"{email}:{issued}".encode(), hashlib.sha256).hexdigest()
+        email, issued, sig = raw.split(":")
 
-        if not hmac.compare_digest(signature, expected):
-            raise ValueError("Invalid token signature")
+        expected = hmac.new(
+            SECRET_KEY.encode(),
+            f"{email}:{issued}".encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(sig, expected):
+            raise ValueError("sig mismatch")
 
         if int(time.time()) - int(issued) > TOKEN_TTL_SECONDS:
-            raise ValueError("Token expired")
+            raise ValueError("expired")
 
         return email
+
     except Exception:
         raise HTTPException(401, "Invalid or expired token")
 
 
-def require_auth(authorization: str = Header(...)):
+# AICI ERA PROBLEMA 422!
+def require_auth(
+    authorization: str = Header(..., alias="Authorization")
+):
     if not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Missing bearer token")
-    return validate_token(authorization.split()[1])
+        raise HTTPException(401, "Missing Bearer token")
 
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
+    token = authorization.split()[1]
+    return validate_token(token)
 
 # =====================================================
 # ROUTES
@@ -146,13 +166,15 @@ def on_startup():
 def ping():
     return {"status": "ok", "time": int(time.time())}
 
-
+# ---------------------------
 # REGISTER
+# ---------------------------
+
 @app.post("/auth/register")
 def register(payload: RegisterRequest, conn=Depends(get_db)):
     cur = conn.cursor()
 
-    cur.execute("SELECT id FROM users WHERE email = ?", (payload.email.lower(),))
+    cur.execute("SELECT email FROM users WHERE email = ?", (payload.email.lower(),))
     if cur.fetchone():
         raise HTTPException(409, "User already exists")
 
@@ -165,96 +187,206 @@ def register(payload: RegisterRequest, conn=Depends(get_db)):
 
     token = create_token(payload.email.lower())
 
-    return {"token": token, "role": "user"}
+    return {
+        "token": token,
+        "role": "user",
+        "email": payload.email.lower()
+    }
 
-
+# ---------------------------
 # LOGIN
+# ---------------------------
+
 @app.post("/auth/login")
 def login(payload: LoginRequest, conn=Depends(get_db)):
     cur = conn.cursor()
+
     cur.execute("SELECT * FROM users WHERE email = ?", (payload.email.lower(),))
     row = cur.fetchone()
 
-    if not row:
+    if row is None:
         raise HTTPException(404, "Account not found")
 
-    hashed, _ = hash_password(payload.password, row["salt"])
-    if hashed != row["password"]:
+    hash_try, _ = hash_password(payload.password, row["salt"])
+    if hash_try != row["password"]:
         raise HTTPException(401, "Invalid credentials")
 
     if row["isBlocked"] == 1:
-        raise HTTPException(403, "User is blocked")
+        raise HTTPException(403, "User blocked")
 
     token = create_token(row["email"])
 
     return {
         "token": token,
-        "role": row["role"]
+        "role": row["role"],
+        "email": row["email"]
     }
 
+# ---------------------------
+# GOOGLE LOGIN
+# ---------------------------
 
-# SYNC TRIPS
-@app.post("/trips/sync")
-def sync_trips(payload: TripSyncRequest, user_email: str = Depends(require_auth), conn=Depends(get_db)):
+@app.post("/auth/google-login")
+def google_login(payload: GoogleLoginRequest, conn=Depends(get_db)):
     cur = conn.cursor()
 
-    # find the authenticated user's ID
-    cur.execute("SELECT id FROM users WHERE email = ?", (user_email,))
-    user_row = cur.fetchone()
-
-    if not user_row:
-        raise HTTPException(404, "User not found")
-
-    authenticated_user_id = user_row["id"]
-
-    for trip in payload.trips:
-
-        # Convert incoming ownerEmail → correct userId
-        cur.execute("SELECT id FROM users WHERE email = ?", (trip.ownerEmail.lower(),))
-        owner_row = cur.fetchone()
-
-        if not owner_row:
-            raise HTTPException(404, f"Owner email not found: {trip.ownerEmail}")
-
-        owner_id = owner_row["id"]
-
-        cur.execute("""
-            INSERT OR REPLACE INTO trips (
-                id, title, destination, startDate, endDate, notes, ownerId, weatherTemp, weatherDescription
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            trip.id,
-            trip.title,
-            trip.destination,
-            trip.startDate,
-            trip.endDate,
-            trip.notes,
-            owner_id,
-            trip.weatherTemp,
-            trip.weatherDescription
-        ))
-
-    return {"synced": len(payload.trips)}
-
-
-# GET TRIPS FOR LOGGED USER
-@app.get("/trips")
-def list_trips(user_email: str = Depends(require_auth), conn=Depends(get_db)):
-    cur = conn.cursor()
-
-    cur.execute("SELECT id FROM users WHERE email = ?", (user_email,))
+    cur.execute("SELECT * FROM users WHERE email = ?", (payload.email.lower(),))
     row = cur.fetchone()
 
-    if not row:
-        raise HTTPException(404, "User not found")
+    if row is None:
+        hashed, salt = hash_password("google-oauth")
 
-    user_id = row["id"]
+        cur.execute("""
+            INSERT INTO users (email, password, salt, name)
+            VALUES (?, ?, ?, ?)
+        """, (payload.email.lower(), hashed, salt, payload.name))
 
-    cur.execute("SELECT * FROM trips WHERE ownerId = ?", (user_id,))
+        cur.execute("SELECT * FROM users WHERE email = ?", (payload.email.lower(),))
+        row = cur.fetchone()
+
+    token = create_token(row["email"])
+
+    return {
+        "token": token,
+        "role": row["role"],
+        "email": row["email"]
+    }
+
+# ---------------------------
+# SYNC TRIPS
+# ---------------------------
+
+@app.post("/trips/sync")
+async def sync_trips(
+    request: Request,
+    email: str = Depends(require_auth),
+    conn=Depends(get_db)
+):
+    import json
+
+    raw = await request.body()
+    try:
+        data = json.loads(raw.decode())
+    except:
+        raise HTTPException(400, "Invalid JSON")
+
+    trips = data.get("trips", [])
+
+    cur = conn.cursor()
+
+    # 🔥 1) Ștergem toate tripurile existente ale acestui user
+    cur.execute("DELETE FROM trips WHERE ownerEmail = ?", (email.lower(),))
+
+    # Dacă nu există nimic de inserat → gata
+    if not trips:
+        return {"synced": 0}
+
+    # 🔥 2) Pregătim inserarea în batch
+    batch = []
+    for trip in trips:
+        batch.append((
+            trip.get("id", 0),
+            trip.get("title", ""),
+            trip.get("destination", ""),
+            trip.get("startDate", ""),
+            trip.get("endDate", ""),
+            trip.get("notes", ""),
+            email.lower(),
+            trip.get("weatherTemp"),
+            trip.get("weatherDescription"),
+        ))
+
+    # 🔥 3) Inserăm tot într-o singură operațiune
+    cur.executemany("""
+        INSERT INTO trips (
+            id, title, destination, startDate, endDate,
+            notes, ownerEmail, weatherTemp, weatherDescription
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, batch)
+
+    return {"synced": len(trips)}
+
+
+# ---------------------------
+# GET TRIPS
+# ---------------------------
+
+@app.get("/trips")
+def get_trips(email: str = Depends(require_auth), conn=Depends(get_db)):
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM trips WHERE ownerEmail = ?", (email.lower(),))
     trips = [dict(t) for t in cur.fetchall()]
-
-    # Convert to Android-compatible format
-    for t in trips:
-        t["ownerEmail"] = user_email   # 🔥 important — Android expects ownerEmail
-
     return {"trips": trips}
+
+
+def require_admin(authorization: str = Header(..., alias="Authorization")):
+    email = require_auth(authorization)
+
+    conn = sqlite3.connect(DATABASE, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("SELECT role FROM users WHERE email = ?", (email,))
+    row = cur.fetchone()
+    conn.close()
+
+    if row is None or row["role"] not in ("admin", "superadmin"):
+        raise HTTPException(403, "Admin only")
+
+    return email
+
+@app.get("/admin/users")
+def admin_get_users(admin=Depends(require_admin), conn=Depends(get_db)):
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT email, role, isBlocked 
+        FROM users
+        ORDER BY email
+    """)
+    users = [dict(u) for u in cur.fetchall()]
+    return {"users": users}
+
+from pydantic import BaseModel
+
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+@app.patch("/admin/users/{user_email}/role")
+def admin_update_role(
+    user_email: str,
+    payload: UpdateRoleRequest,
+    admin = Depends(require_admin),
+    conn = Depends(get_db)
+):
+    if payload.role not in ("user", "admin", "superadmin"):
+        raise HTTPException(400, "Invalid role")
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE users 
+        SET role = ?
+        WHERE email = ?
+    """, (payload.role, user_email.lower()))
+
+    return {"status": "ok", "email": user_email.lower(), "role": payload.role}
+
+class BlockRequest(BaseModel):
+    block: bool
+
+@app.patch("/admin/users/{user_email}/block")
+def admin_block_user(
+    user_email: str,
+    payload: BlockRequest,
+    admin = Depends(require_admin),
+    conn = Depends(get_db)
+):
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE users 
+        SET isBlocked = ?
+        WHERE email = ?
+    """, (1 if payload.block else 0, user_email.lower()))
+
+    return {"status": "ok", "email": user_email.lower(), "blocked": payload.block}

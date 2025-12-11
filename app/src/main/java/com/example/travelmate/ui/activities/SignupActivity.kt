@@ -171,7 +171,7 @@ class SignupActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------
-    // SIGNUP PROCESS (+ server check)
+    // SIGNUP PROCESS (corrected)
     // -------------------------------------------------------------
     private fun performSignup() {
         val name = etName.text.toString().trim()
@@ -183,49 +183,43 @@ class SignupActivity : AppCompatActivity() {
 
         scope.launch {
 
-            // 🔥 Step 1: Verify server availability
+            // 🔥 Step 1: Check server
             if (!requireServerOnline()) {
                 fail("Server unavailable ❌ Please try again later")
                 return@launch
             }
 
-            // 🔥 Step 2: Local duplicate check
-            val existsLocal = withContext(Dispatchers.IO) { userRepository.getUserByEmail(email) }
+            // ❗️ No local duplicate check anymore
+            // Server is the single source of truth
 
-            if (existsLocal != null) {
-                fail("This email already exists locally ❌")
-                return@launch
-            }
-
-            // 🔥 Step 3: Cloud signup
+            // 🔥 Step 2: Register on server
             val remote = withContext(Dispatchers.IO) {
                 RemoteServerClient.registerUser(name, email, password)
             }
 
             if (remote.isFailure) {
-                fail("Cloud signup failed ⚠️")
+                fail("Signup failed ❌ Email may already exist")
                 return@launch
             }
 
-            val payload = remote.getOrNull()
+            val payload = remote.getOrNull()!!
 
-            // 🔥 Step 4: Save local user
+            // 🔥 Step 3: Save local user
             withContext(Dispatchers.IO) {
                 userRepository.registerUser(
                     email = email,
                     password = password,
-                    role = payload?.role ?: "user",
+                    role = payload.role,
                     name = name
                 )
             }
 
-            // 🔥 Step 5: Save session
+            // 🔥 Step 4: Save session
             securePrefs.edit().apply {
                 putString("email", email)
-                putString("role", payload?.role ?: "user")
-                putString("auth_token", payload?.token)
-                apply()
-            }
+                putString("role", payload.role)
+                putString("auth_token", payload.token)
+            }.apply()
 
             success("Account created successfully 🎉")
             delay(600)
